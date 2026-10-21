@@ -140,7 +140,12 @@ class AI_Provider:
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_message}]
                 )
-                return response.content[0].text
+                # Extract text from content blocks (skip ThinkingBlock)
+                text_content = []
+                for block in response.content:
+                    if hasattr(block, 'type') and block.type == 'text':
+                        text_content.append(block.text)
+                return '\n'.join(text_content) if text_content else "No response"
             
             elif self.provider == 'gemini':
                 model = self.client.GenerativeModel(self.model)
@@ -741,13 +746,18 @@ def handle_ai_query(n_clicks, n_submit, query, chat_history):
         try:
             response = ai_brain.analyze_query(query, use_external_ai=True)
             # If rate limit detected in response, use built-in instead
-            if '429' in response or 'Rate limit' in response:
+            if response and ('429' in str(response) or 'Rate limit' in str(response)):
                 response = ai_brain.analyze_query(query, use_external_ai=False)
                 response = f"⏱️ **API Rate Limit**\n\nRéponse en mode Built-In :\n\n{response}"
-        except:
-            # Fallback to built-in on any error
+        except AttributeError as ae:
+            # ThinkingBlock or other attribute errors
             response = ai_brain.analyze_query(query, use_external_ai=False)
-            response = f"⚠️ **API Error**\n\nRéponse en mode Built-In :\n\n{response}"
+            response = f"⚠️ **API Structure Error** (ThinkingBlock)\n\nRéponse en mode Built-In :\n\n{response}"
+        except Exception as e:
+            # Fallback to built-in on any other error
+            error_type = type(e).__name__
+            response = ai_brain.analyze_query(query, use_external_ai=False)
+            response = f"⚠️ **API Error** ({error_type})\n\nRéponse en mode Built-In :\n\n{response}"
     else:
         # No external AI, use built-in
         response = ai_brain.analyze_query(query, use_external_ai=False)
