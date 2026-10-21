@@ -449,7 +449,7 @@ app.layout = dbc.Container([
     
     # AI Configuration Modal
     dbc.Modal([
-        dbc.ModalHeader(dbc.ModalTitle("🤖 AI Configuration")),
+        dbc.ModalHeader(dbc.ModalTitle("AI Configuration")),
         dbc.ModalBody([
             html.P("Choose your AI provider and enter your API key:", 
                    style={'color': COLORS['text_dim'], 'marginBottom': '20px'}),
@@ -457,10 +457,10 @@ app.layout = dbc.Container([
             dbc.Select(
                 id='ai-provider-select',
                 options=[
-                    {'label': '🤖 OpenAI (GPT-4, GPT-4-Turbo)', 'value': 'openai'},
-                    {'label': '🧠 Anthropic (Claude 3.5)', 'value': 'anthropic'},
-                    {'label': '🔴 Mistral (Large, Small)', 'value': 'mistral'},
-                    {'label': '✨ Google (Gemini Pro)', 'value': 'gemini'}
+                    {'label': 'OpenAI (GPT-4, GPT-4-Turbo)', 'value': 'openai'},
+                    {'label': 'Anthropic (Claude)', 'value': 'anthropic'},
+                    {'label': 'Mistral AI', 'value': 'mistral'},
+                    {'label': 'Google Gemini', 'value': 'gemini'}
                 ],
                 placeholder="Select AI Provider",
                 style={'marginBottom': '15px'}
@@ -501,16 +501,16 @@ app.layout = dbc.Container([
             html.Div([
                 html.Span(id='ai-status-badge', children="● AI Not Connected", 
                          style={'color': COLORS['text_dim'], 'fontSize': '11px', 'marginRight': '15px'}),
-                dbc.Button("⚙️", id='open-ai-modal', 
+                dbc.Button("Settings", id='open-ai-modal', 
                           color='dark', outline=True, size='sm',
-                          style={'padding': '4px 12px'})
+                          style={'padding': '4px 12px', 'fontSize': '12px'})
             ], style={'textAlign': 'right'})
         ], width=4)
     ], style={'padding': '20px 0 15px 0', 'borderBottom': f'1px solid {COLORS["border"]}', 'marginBottom': '20px'}),
     
     # Main Layout: 2 Columns
     dbc.Row([
-        # LEFT COLUMN: Metrics + AI Chat (30%)
+        # LEFT COLUMN: Metrics + AI Chat (40% - plus large)
         dbc.Col([
             # Compact Metrics Grid
             html.Div([
@@ -557,55 +557,63 @@ app.layout = dbc.Container([
             
             # AI Chat Panel
             html.Div([
+                # AI Chat Panel
                 html.Div([
                     html.Div([
-                        html.Span("💬", style={'fontSize': '16px', 'marginRight': '8px'}),
                         html.Span("AI Analyst", style={'fontSize': '14px', 'fontWeight': '500', 'color': COLORS['text']})
                     ], style={'marginBottom': '8px'}),
-                    html.P("Ask anything: 'analyze SEA', 'coverage insights', 'best teams'", 
+                    html.P("Ask about teams, coverage types, or defense strategies", 
                           style={'fontSize': '11px', 'color': COLORS['text_dim'], 'margin': '0'})
                 ], style={'padding': '15px 15px 12px 15px', 'borderBottom': f'1px solid {COLORS["border"]}'}),
                 
-                html.Div(id='ai-chat-history', 
-                        children=[
-                            html.Div([
-                                html.Span("🤖 ", style={'fontSize': '14px'}),
-                                html.Span("AI ready. Try: 'analyze SEA' or 'coverage analysis'", 
-                                         style={'color': COLORS['text'], 'fontSize': '13px'})
-                            ], style={'padding': '12px', 'backgroundColor': COLORS['bg'], 'borderRadius': '6px', 'margin': '8px'})
-                        ],
-                        style={'height': 'calc(100vh - 480px)', 'minHeight': '300px', 'maxHeight': '600px', 
-                               'overflowY': 'auto', 'padding': '8px'}),
+                # Loading indicator wrapper
+                dcc.Loading(
+                    id="loading-chat",
+                    type="circle",
+                    color=COLORS['primary'],
+                    children=[
+                        html.Div(id='ai-chat-history', 
+                                children=[
+                                    html.Div([
+                                        html.Span("AI ready. Ask a question to get started.", 
+                                                 style={'color': COLORS['text_dim'], 'fontSize': '13px', 'fontStyle': 'italic'})
+                                    ], style={'padding': '12px', 'backgroundColor': COLORS['bg'], 'borderRadius': '6px', 'margin': '8px'})
+                                ],
+                                style={'height': 'calc(100vh - 420px)', 'minHeight': '400px', 
+                                       'overflowY': 'auto', 'padding': '8px'})
+                    ],
+                    style={'height': 'calc(100vh - 420px)', 'minHeight': '400px'}
+                ),
                 
                 html.Div([
                     dbc.InputGroup([
                         dbc.Input(id='ai-query-input', 
-                                 placeholder="Ask AI...", 
+                                 placeholder="Type your question...", 
                                  type='text',
                                  style={'backgroundColor': COLORS['bg'], 'color': COLORS['text'], 
                                         'border': 'none', 'fontSize': '13px'}),
-                        dbc.Button("↑", id='ai-query-btn', color='primary', n_clicks=0,
-                                  style={'padding': '0 15px'})
+                        dbc.Button("Send", id='ai-query-btn', color='primary', n_clicks=0,
+                                  style={'padding': '8px 20px', 'fontSize': '13px'})
                     ])
                 ], style={'padding': '12px 15px', 'borderTop': f'1px solid {COLORS["border"]}'})
             ], style={'backgroundColor': COLORS['surface'], 'borderRadius': '10px', 
                      'height': 'calc(100vh - 300px)', 'display': 'flex', 'flexDirection': 'column'})
             
-        ], width=4, style={'paddingRight': '15px'}),
+        ], width=5, style={'paddingRight': '15px'}),
         
-        # RIGHT COLUMN: Visualizations (70%)
+        # RIGHT COLUMN: Visualizations (60% - ajusté)
         dbc.Col([
             # Visualization Tabs
             dbc.Tabs([
-                dbc.Tab(label="🏆 Rankings", tab_id='tab-rankings', label_style={'fontSize': '13px'}),
-                dbc.Tab(label="📊 Performance", tab_id='tab-scatter', label_style={'fontSize': '13px'}),
-                dbc.Tab(label="🎯 Coverage", tab_id='tab-coverage', label_style={'fontSize': '13px'}),
-                dbc.Tab(label="🔥 Heatmap", tab_id='tab-heatmap', label_style={'fontSize': '13px'}),
-                dbc.Tab(label="📈 Trends", tab_id='tab-trends', label_style={'fontSize': '13px'})
+                dbc.Tab(label="Rankings", tab_id='tab-rankings', label_style={'fontSize': '13px'}),
+                dbc.Tab(label="Performance", tab_id='tab-scatter', label_style={'fontSize': '13px'}),
+                dbc.Tab(label="Coverage", tab_id='tab-coverage', label_style={'fontSize': '13px'}),
+                dbc.Tab(label="Heatmap", tab_id='tab-heatmap', label_style={'fontSize': '13px'}),
+                dbc.Tab(label="Trends", tab_id='tab-trends', label_style={'fontSize': '13px'})
             ], id='viz-tabs', active_tab='tab-rankings', style={'marginBottom': '15px'}),
             
             html.Div(id='viz-content', style={'height': 'calc(100vh - 150px)', 'minHeight': '500px'})
-        ], width=8, style={'paddingLeft': '15px'})
+        ], width=7, style={'paddingLeft': '15px'})
     ])
     
 ], fluid=True, style={'backgroundColor': COLORS['bg'], 'minHeight': '100vh', 'padding': '0 30px', 'maxWidth': '100%'})
@@ -715,7 +723,7 @@ def configure_ai(n_clicks, provider, api_key, model):
             {'color': COLORS['accent'], 'fontSize': '12px'}
         )
 
-# AI Chat - VRAIMENT FONCTIONNEL
+# AI Chat - VRAIMENT FONCTIONNEL avec Loading Indicator
 @app.callback(
     [Output('ai-chat-history', 'children'),
      Output('ai-query-input', 'value')],
@@ -729,13 +737,14 @@ def handle_ai_query(n_clicks, n_submit, query, chat_history):
     if not query or query.strip() == '':
         return chat_history, ''
     
-    # Add user message
+    # Add user message (sans emoji)
     user_msg = html.Div([
         html.Div([
-            html.Span("👤 ", style={'fontSize': '14px', 'marginRight': '5px'}),
+            html.Span("You", style={'fontSize': '11px', 'color': COLORS['text_dim'], 
+                                   'textTransform': 'uppercase', 'fontWeight': '600', 'marginBottom': '4px', 'display': 'block'}),
             html.Span(query, style={'color': COLORS['text'], 'fontSize': '13px'})
-        ], style={'textAlign': 'right'})
-    ], style={'padding': '10px 12px', 'backgroundColor': COLORS['bg'], 'borderRadius': '8px', 
+        ])
+    ], style={'padding': '12px 15px', 'backgroundColor': COLORS['bg'], 'borderRadius': '8px', 
               'margin': '8px', 'borderLeft': f'3px solid {COLORS["primary"]}'})
     
     # Try external AI first if configured
@@ -748,29 +757,30 @@ def handle_ai_query(n_clicks, n_submit, query, chat_history):
             # If rate limit detected in response, use built-in instead
             if response and ('429' in str(response) or 'Rate limit' in str(response)):
                 response = ai_brain.analyze_query(query, use_external_ai=False)
-                response = f"⏱️ **API Rate Limit**\n\nRéponse en mode Built-In :\n\n{response}"
+                response = f"**API Rate Limit**\n\nSwitched to Built-In mode:\n\n{response}"
         except AttributeError as ae:
             # ThinkingBlock or other attribute errors
             response = ai_brain.analyze_query(query, use_external_ai=False)
-            response = f"⚠️ **API Structure Error** (ThinkingBlock)\n\nRéponse en mode Built-In :\n\n{response}"
+            response = f"**API Structure Error**\n\nSwitched to Built-In mode:\n\n{response}"
         except Exception as e:
             # Fallback to built-in on any other error
             error_type = type(e).__name__
             response = ai_brain.analyze_query(query, use_external_ai=False)
-            response = f"⚠️ **API Error** ({error_type})\n\nRéponse en mode Built-In :\n\n{response}"
+            response = f"**API Error** ({error_type})\n\nSwitched to Built-In mode:\n\n{response}"
     else:
         # No external AI, use built-in
         response = ai_brain.analyze_query(query, use_external_ai=False)
     
-    # Add AI response
+    # Add AI response (sans emoji)
     ai_msg = html.Div([
         html.Div([
-            html.Span("🤖 ", style={'fontSize': '14px', 'marginRight': '5px'}),
+            html.Span("Assistant", style={'fontSize': '11px', 'color': COLORS['accent'], 
+                                         'textTransform': 'uppercase', 'fontWeight': '600', 'marginBottom': '4px', 'display': 'block'}),
             dcc.Markdown(response, 
                         style={'color': COLORS['text'], 'fontSize': '13px', 'lineHeight': '1.6'},
                         className='ai-markdown')
         ])
-    ], style={'padding': '10px 12px', 'backgroundColor': COLORS['surface'], 'borderRadius': '8px', 
+    ], style={'padding': '12px 15px', 'backgroundColor': COLORS['surface'], 'borderRadius': '8px', 
               'margin': '8px', 'borderLeft': f'3px solid {COLORS["accent"]}'})
     
     # Return updated history + clear input
