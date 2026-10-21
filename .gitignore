@@ -4,3 +4,5 @@ __pycache__/
 output/*.png
 output/*.gif
 output/*.mp4
+output/*.html
+.venv/
