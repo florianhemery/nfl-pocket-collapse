@@ -76,7 +76,7 @@ class AI_Provider:
                     import anthropic as anthropic_lib
                     globals()['anthropic'] = anthropic_lib
                 self.client = anthropic.Anthropic(api_key=api_key)
-                self.model = model or 'claude-3-5-sonnet-20241022'
+                self.model = model or 'claude-sonnet-5-5'
                 return True, f"✅ Connected to Claude ({self.model})"
             
             elif provider == 'gemini':
@@ -636,10 +636,10 @@ def update_model_selector(provider):
             {'label': 'GPT-3.5 Turbo (Rapide & économique)', 'value': 'gpt-3.5-turbo'}
         ],
         'anthropic': [
-            {'label': 'Claude 3.5 Sonnet (Recommandé)', 'value': 'claude-3-5-sonnet-20241022'},
-            {'label': 'Claude 3 Opus (Plus puissant)', 'value': 'claude-3-opus-20240229'},
-            {'label': 'Claude 3 Sonnet', 'value': 'claude-3-sonnet-20240229'},
-            {'label': 'Claude 3 Haiku (Rapide)', 'value': 'claude-3-haiku-20240307'}
+            {'label': 'Claude Sonnet 5.5 (Recommandé)', 'value': 'claude-sonnet-5-5'},
+            {'label': 'Claude Opus 5.5 (Plus puissant)', 'value': 'claude-opus-5-5'},
+            {'label': 'Claude Fable 5.1 (Le meilleur)', 'value': 'claude-fable-5-1'},
+            {'label': 'Claude Haiku 5.5 (Rapide & économique)', 'value': 'claude-haiku-5-5'}
         ],
         'mistral': [
             {'label': 'Mistral Large Latest (Recommandé)', 'value': 'mistral-large-latest'},
