@@ -73,3 +73,7 @@ output/
 ## Data
 
 NFL Big Data Bowl tracking data — [ThompsonJamesBliss/nfl-big-data-bowl-regional-event-data](https://github.com/ThompsonJamesBliss/nfl-big-data-bowl-regional-event-data)
+
+## Acknowledgments
+
+Thanks to AWS for supporting this project.
