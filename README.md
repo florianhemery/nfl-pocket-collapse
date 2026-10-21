@@ -1,4 +1,4 @@
-# 🏈 NFL Defensive Sync Score (DSS) Analytics Platform
+# NFL Defensive Sync Score (DSS) Analytics Platform
 
 > **Next-Generation AI-Powered Analytics for NFL Defense Strategy**
 
@@ -11,22 +11,22 @@ A professional analytics platform analyzing 7,510 NFL plays from the 2021 season
 
 ---
 
-## 🎯 Features
+## Features
 
-### 📊 **Professional Analytics Dashboard**
+### **Professional Analytics Dashboard**
 - **Real-time Team Rankings** - Compare all 32 NFL teams by DSS
 - **Performance Correlation** - Analyze DSS vs completion rates
 - **Coverage Analysis** - Deep dive into 12+ coverage types
 - **Interactive Heatmaps** - Team × Coverage performance matrix
 - **Sub-Score Radar** - Multi-dimensional defensive profiles
 
-### 🤖 **AI-Powered Insights**
+### **AI-Powered Insights**
 - **Bring Your Own AI** - Support for OpenAI, Anthropic Claude, Mistral AI, Google Gemini
 - **Natural Language Queries** - Ask questions in plain English/French
 - **Built-In Analytics Engine** - Works without external APIs
 - **Smart Fallback** - Automatic switch to built-in mode on API errors
 
-### 🎨 **Modern UX**
+### **Modern UX**
 - **Dark Theme** - Professional interface optimized for long sessions
 - **Responsive Layout** - 40/60 split for chat and visualizations
 - **Loading Indicators** - Clear feedback on AI processing
@@ -34,7 +34,7 @@ A professional analytics platform analyzing 7,510 NFL plays from the 2021 season
 
 ---
 
-## 📸 Screenshots
+## Screenshots
 
 ### Team Rankings
 ![Rankings Dashboard](screenshots/rankings.png)
@@ -58,7 +58,7 @@ A professional analytics platform analyzing 7,510 NFL plays from the 2021 season
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -94,7 +94,7 @@ http://127.0.0.1:8050
 
 ---
 
-## 🤖 AI Configuration
+## AI Configuration
 
 The platform supports multiple AI providers. Click **Settings** in the top-right corner to configure:
 
@@ -119,7 +119,7 @@ The platform supports multiple AI providers. Click **Settings** in the top-right
 
 ---
 
-## 📊 Dataset
+## Dataset
 
 - **7,510 NFL plays** from the 2021 season
 - **32 teams** analyzed
@@ -132,7 +132,7 @@ The platform supports multiple AI providers. Click **Settings** in the top-right
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 - **Backend**: Python 3.9+
 - **Web Framework**: Plotly Dash 2.x
@@ -143,7 +143,7 @@ The platform supports multiple AI providers. Click **Settings** in the top-right
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 nfl-pocket-collapse/
@@ -164,7 +164,7 @@ nfl-pocket-collapse/
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -186,7 +186,7 @@ Check our comprehensive guides:
 
 ---
 
-## 🎯 Roadmap
+## Roadmap
 
 - [ ] Real-time game tracking
 - [ ] Multi-season comparisons
@@ -199,7 +199,7 @@ Check our comprehensive guides:
 
 ---
 
-## 📝 Development History
+## Development History
 
 ### v2.0 - NextGen Interface (Oct 2026)
 - ✅ Professional UI without emojis
@@ -217,7 +217,7 @@ Check our comprehensive guides:
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
@@ -229,13 +229,13 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 👤 Author
+## Author
 
 **Florian Hemery**
 
@@ -244,7 +244,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - NFL data from 2021 season analysis
 - Plotly for amazing visualization capabilities
@@ -253,7 +253,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📊 Stats
+## Stats
 
 ![Code Size](https://img.shields.io/github/languages/code-size/florianhemery/nfl-pocket-collapse)
 ![Repo Size](https://img.shields.io/github/repo-size/florianhemery/nfl-pocket-collapse)
@@ -262,5 +262,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <p align="center">
-  <strong>Built with ❤️ for NFL Analytics</strong>
+  <strong>Built for NFL Analytics</strong>
 </p>
