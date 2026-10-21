@@ -468,6 +468,9 @@ app.layout = dbc.Container([
                 html.P("Select a provider first", style={'color': COLORS['text_dim'], 'fontSize': '12px'})
             ], style={'marginBottom': '15px'}),
             
+            # Hidden store for selected model
+            dcc.Store(id='selected-model-store', data=None),
+            
             html.Div(id='ai-config-status', style={'marginTop': '10px'})
         ]),
         dbc.ModalFooter([
@@ -613,12 +616,13 @@ def toggle_ai_modal(n1, n2, is_open):
 
 # Dynamic Model Selector
 @app.callback(
-    Output('model-selector-container', 'children'),
+    [Output('model-selector-container', 'children'),
+     Output('selected-model-store', 'data')],
     Input('ai-provider-select', 'value')
 )
 def update_model_selector(provider):
     if not provider:
-        return html.P("Select a provider first", style={'color': COLORS['text_dim'], 'fontSize': '12px'})
+        return (html.P("Select a provider first", style={'color': COLORS['text_dim'], 'fontSize': '12px'}), None)
     
     model_options = {
         'openai': [
@@ -634,11 +638,9 @@ def update_model_selector(provider):
         ],
         'mistral': [
             {'label': 'Mistral Large Latest (Recommandé)', 'value': 'mistral-large-latest'},
-            {'label': 'Mistral Small Latest (Rapide)', 'value': 'mistral-small-latest'},
-            {'label': 'Mistral Medium Latest', 'value': 'mistral-medium-latest'},
-            {'label': 'Open Mixtral 8x7B', 'value': 'open-mixtral-8x7b'},
-            {'label': 'Open Mistral 7B (Ultra-rapide)', 'value': 'open-mistral-7b'},
-            {'label': 'Codestral (Code)', 'value': 'codestral-latest'}
+            {'label': 'Mistral Small Latest (Rapide & économique)', 'value': 'mistral-small-latest'},
+            {'label': 'Open Mixtral 8x7B (Gratuit)', 'value': 'open-mixtral-8x7b'},
+            {'label': 'Open Mistral 7B (Gratuit, ultra-rapide)', 'value': 'open-mistral-7b'}
         ],
         'gemini': [
             {'label': 'Gemini Pro (Recommandé)', 'value': 'gemini-pro'},
@@ -647,13 +649,14 @@ def update_model_selector(provider):
     }
     
     options = model_options.get(provider, [])
+    default_model = options[0]['value'] if options else None
     
-    return html.Div([
+    selector = html.Div([
         html.Label("Model:", style={'color': COLORS['text'], 'fontWeight': '500', 'marginBottom': '5px'}),
         dbc.Select(
-            id='ai-model-input',
+            id='ai-model-select',
             options=options,
-            value=options[0]['value'] if options else None,
+            value=default_model,
             style={'marginBottom': '10px'}
         ),
         html.P([
@@ -661,6 +664,17 @@ def update_model_selector(provider):
                       style={'color': COLORS['text_dim'], 'fontSize': '11px'})
         ])
     ])
+    
+    return (selector, default_model)
+
+# Update store when model selection changes
+@app.callback(
+    Output('selected-model-store', 'data', allow_duplicate=True),
+    Input('ai-model-select', 'value'),
+    prevent_initial_call=True
+)
+def store_selected_model(model):
+    return model
 
 # AI Connection
 @app.callback(
@@ -670,7 +684,7 @@ def update_model_selector(provider):
     Input('ai-connect-btn', 'n_clicks'),
     [State('ai-provider-select', 'value'),
      State('ai-api-key-input', 'value'),
-     State('ai-model-input', 'value')]
+     State('selected-model-store', 'data')]
 )
 def configure_ai(n_clicks, provider, api_key, model):
     if not n_clicks or not provider or not api_key:
