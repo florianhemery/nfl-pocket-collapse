@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from dash import Dash, dcc, html, Input, Output, State, ctx, ALL
+from dash import Dash, dcc, html, Input, Output, State, ctx, ALL, no_update
 import dash_bootstrap_components as dbc
 from datetime import datetime
 import json
@@ -159,7 +159,12 @@ class AI_Provider:
                 return response.choices[0].message.content
             
         except Exception as e:
-            return f"❌ AI Error: {str(e)}"
+            error_msg = str(e)
+            # Check if it's a rate limit error
+            if '429' in error_msg or 'rate_limit' in error_msg.lower():
+                return "⏱️ **Rate limit atteint**\n\nTrop de requêtes. Attends 2-3 minutes ou utilise un autre provider.\n\nPour l'instant, le mode Built-In répond à ta question :\n\n---\n\n*Réponse en mode Built-In (pas besoin d'API externe)*"
+            # Other API errors
+            return f"❌ AI Error: {error_msg}"
     
     def is_configured(self):
         """Check if AI is ready to use"""
@@ -667,14 +672,14 @@ def update_model_selector(provider):
     
     return (selector, default_model)
 
-# Update store when model selection changes
+# Update store when model selection changes (only if selector exists)
 @app.callback(
     Output('selected-model-store', 'data', allow_duplicate=True),
     Input('ai-model-select', 'value'),
     prevent_initial_call=True
 )
 def store_selected_model(model):
-    return model
+    return model if model else no_update
 
 # AI Connection
 @app.callback(
@@ -728,9 +733,24 @@ def handle_ai_query(n_clicks, n_submit, query, chat_history):
     ], style={'padding': '10px 12px', 'backgroundColor': COLORS['bg'], 'borderRadius': '8px', 
               'margin': '8px', 'borderLeft': f'3px solid {COLORS["primary"]}'})
     
-    # Get AI response (use external AI if configured, else built-in)
+    # Try external AI first if configured
+    response = None
     use_external = ai_provider.is_configured()
-    response = ai_brain.analyze_query(query, use_external_ai=use_external)
+    
+    if use_external:
+        try:
+            response = ai_brain.analyze_query(query, use_external_ai=True)
+            # If rate limit detected in response, use built-in instead
+            if '429' in response or 'Rate limit' in response:
+                response = ai_brain.analyze_query(query, use_external_ai=False)
+                response = f"⏱️ **API Rate Limit**\n\nRéponse en mode Built-In :\n\n{response}"
+        except:
+            # Fallback to built-in on any error
+            response = ai_brain.analyze_query(query, use_external_ai=False)
+            response = f"⚠️ **API Error**\n\nRéponse en mode Built-In :\n\n{response}"
+    else:
+        # No external AI, use built-in
+        response = ai_brain.analyze_query(query, use_external_ai=False)
     
     # Add AI response
     ai_msg = html.Div([
