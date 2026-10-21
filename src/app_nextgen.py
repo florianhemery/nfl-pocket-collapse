@@ -685,15 +685,6 @@ def update_model_selector(provider):
     
     return (selector, default_model)
 
-# Update store when model selection changes (only if selector exists)
-@app.callback(
-    Output('selected-model-store', 'data', allow_duplicate=True),
-    Input('ai-model-select', 'value'),
-    prevent_initial_call=True
-)
-def store_selected_model(model):
-    return model if model else no_update
-
 # AI Connection
 @app.callback(
     [Output('ai-config-status', 'children'),
