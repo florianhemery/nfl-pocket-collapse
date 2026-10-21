@@ -1,8 +1,6 @@
-"""DSS Live Demo App — Dash interactive dashboard.
+"""DSS Pro Dashboard — Modern Light Theme.
 
-Run with:
-    .venv/bin/python3 src/app.py
-Then open http://127.0.0.1:8050 in your browser.
+Run: .venv/bin/python3 src/app.py  →  http://127.0.0.1:8050
 """
 
 import sys
@@ -13,309 +11,545 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from plotly.subplots import make_subplots
-from dash import Dash, html, dcc, Input, Output, callback
+from dash import Dash, html, dcc, Input, Output
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
-# ── Load data ─────────────────────────────────────────────────────────────
 df = pd.read_csv(OUTPUT_DIR / "dss_results.csv")
 players_df = pd.read_csv(DATA_DIR / "players.csv")
 
-ALL_TEAMS = sorted(df["defensiveTeam"].dropna().unique())
-ALL_COVERAGES = sorted(df["coverageType"].dropna().unique())
-ALL_COVERAGE_NAMES = sorted(df["coverage"].dropna().unique())
+ALL_TEAMS  = sorted(df["defensiveTeam"].dropna().unique())
+COV_TYPES  = sorted(df["coverageType"].dropna().unique())
+COV_NAMES  = sorted(df["coverage"].dropna().unique())
 
-# ── App ───────────────────────────────────────────────────────────────────
-app = Dash(
-    __name__,
-    title="Defensive Sync Score — NFL 2021",
-    external_stylesheets=[
-        "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
-    ],
+# ── Design tokens (superdesign.dev "Modern Professional") ──────────────
+BG       = "#F0F4F8"      # page background
+SURFACE  = "#FFFFFF"      # card surface
+BORDER   = "#E2E8F0"      # card border
+NAV_BG   = "#1E3A5F"      # top nav — NFL navy
+TEXT     = "#1A202C"      # primary text
+MUTED    = "#718096"      # secondary text
+ACCENT   = "#2563EB"      # brand blue
+GREEN    = "#16A34A"      # success
+AMBER    = "#D97706"      # warning
+RED      = "#DC2626"      # danger
+GOLD     = "#B45309"      # gold / rank
+FONT     = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+
+# coverage palette — distinct, accessible
+COV_COLORS = {"Man": "#EF4444", "Zone": "#2563EB", "Other": "#7C3AED"}
+
+PLOT_LAYOUT = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=dict(color=TEXT, family=FONT, size=12),
+    margin=dict(t=8, b=44, l=54, r=20),
+    xaxis=dict(gridcolor="#EDF2F7", zerolinecolor="#CBD5E0", linecolor=BORDER,
+               tickfont=dict(color=MUTED, size=11)),
+    yaxis=dict(gridcolor="#EDF2F7", zerolinecolor="#CBD5E0", linecolor=BORDER,
+               tickfont=dict(color=MUTED, size=11)),
+    hoverlabel=dict(bgcolor=SURFACE, bordercolor=BORDER,
+                    font_color=TEXT, font_family=FONT),
+    legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor=BORDER,
+                font=dict(size=12, color=TEXT)),
 )
 
-DARK_BG = "#0d1117"
-CARD_BG = "#161b22"
-BORDER = "#30363d"
-TEXT = "#e6edf3"
-ACCENT = "#58a6ff"
-GREEN = "#3fb950"
-RED = "#f85149"
+# ── App ────────────────────────────────────────────────────────────────
+app = Dash(__name__, title="DSS · NFL Secondary Analytics")
 
+app.index_string = f"""<!DOCTYPE html>
+<html>
+<head>
+  {{%metas%}}
+  <title>{{%title%}}</title>
+  {{%favicon%}}
+  {{%css%}}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{ background: {BG}; color: {TEXT}; font-family: {FONT}; }}
+    ::-webkit-scrollbar {{ width: 6px; background: {BG}; }}
+    ::-webkit-scrollbar-thumb {{ background: {BORDER}; border-radius: 3px; }}
 
-def kpi_card(title: str, value: str, subtitle: str = "", color: str = ACCENT):
-    return html.Div(
-        style={
-            "background": CARD_BG,
-            "border": f"1px solid {BORDER}",
-            "borderRadius": "8px",
-            "padding": "16px 20px",
-            "flex": "1",
-            "minWidth": "160px",
-        },
-        children=[
-            html.P(title, style={"color": "#8b949e", "fontSize": "12px", "margin": "0 0 4px 0"}),
-            html.H2(value, style={"color": color, "margin": "0 0 4px 0", "fontSize": "26px"}),
-            html.P(subtitle, style={"color": "#8b949e", "fontSize": "11px", "margin": "0"}),
-        ],
+    /* Dash dropdown overrides */
+    .Select-control {{
+      background: {SURFACE} !important;
+      border: 1px solid {BORDER} !important;
+      border-radius: 8px !important;
+      min-height: 36px !important;
+    }}
+    .Select-control:hover {{ border-color: {ACCENT} !important; }}
+    .Select-menu-outer {{ background: {SURFACE} !important; border: 1px solid {BORDER} !important;
+                          border-radius: 8px !important; box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important; }}
+    .Select-option {{ color: {TEXT} !important; padding: 8px 12px !important; font-size: 13px; }}
+    .Select-option:hover, .Select-option.is-focused {{ background: #EBF2FF !important; color: {ACCENT} !important; }}
+    .Select-option.is-selected {{ background: #DBEAFE !important; color: {ACCENT} !important; font-weight: 600; }}
+    .Select-value-label {{ color: {TEXT} !important; font-size: 13px !important; }}
+    .Select-placeholder {{ color: {MUTED} !important; font-size: 13px !important; }}
+    .Select-arrow-zone {{ padding-right: 8px !important; }}
+
+    /* Slider */
+    .rc-slider-track {{ background: {ACCENT} !important; }}
+    .rc-slider-handle {{ border-color: {ACCENT} !important; background: white !important;
+                         box-shadow: 0 1px 4px rgba(37,99,235,0.3) !important; width: 16px; height: 16px; margin-top: -6px; }}
+    .rc-slider-rail {{ background: {BORDER} !important; height: 4px; }}
+    .rc-slider-dot-active {{ border-color: {ACCENT} !important; }}
+    .rc-slider-mark-text {{ color: {MUTED} !important; font-size: 11px !important; }}
+
+    /* Checklist */
+    input[type="checkbox"] {{ accent-color: {ACCENT}; }}
+  </style>
+</head>
+<body>{{%app_entry%}}<footer>{{%config%}}{{%scripts%}}{{%renderer%}}</footer></body>
+</html>"""
+
+def card(children, style=None, padding="24px"):
+    base = dict(
+        background=SURFACE,
+        border=f"1px solid {BORDER}",
+        borderRadius="16px",
+        padding=padding,
+        boxShadow="0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04)",
     )
+    if style:
+        base.update(style)
+    return html.Div(style=base, children=children)
 
+def badge(text, color=ACCENT):
+    return html.Span(text, style=dict(
+        background=color + "18", color=color,
+        fontSize="11px", fontWeight="600",
+        padding="2px 8px", borderRadius="20px",
+        letterSpacing="0.03em",
+    ))
 
-app.layout = html.Div(
-    style={"background": DARK_BG, "color": TEXT, "fontFamily": "Inter, sans-serif",
-           "minHeight": "100vh", "padding": "24px 32px"},
-    children=[
-        # ── Header ──────────────────────────────────────────────────────
-        html.Div([
-            html.H1("🏈 Defensive Sync Score", style={"margin": "0", "fontSize": "28px"}),
+def section_title(title, subtitle=""):
+    return html.Div(style=dict(marginBottom="16px"), children=[
+        html.H3(title, style=dict(fontSize="15px", fontWeight="700",
+                                   color=TEXT, margin="0 0 2px 0")),
+        html.P(subtitle, style=dict(fontSize="12px", color=MUTED, margin="0"))
+        if subtitle else None,
+    ])
+
+def kpi(title, value, delta=None, sub="", color=ACCENT, border_color=None):
+    return html.Div(style=dict(
+        background=SURFACE, border=f"1px solid {BORDER}",
+        borderRadius="16px", padding="20px 24px",
+        boxShadow="0 1px 3px rgba(0,0,0,0.06)",
+        borderLeft=f"4px solid {border_color or color}",
+        flex="1", minWidth="150px",
+    ), children=[
+        html.P(title.upper(), style=dict(
+            fontSize="10px", fontWeight="700", letterSpacing="0.08em",
+            color=MUTED, margin="0 0 10px 0",
+        )),
+        html.Div(style=dict(display="flex", alignItems="baseline", gap="8px"), children=[
+            html.Span(value, style=dict(fontSize="28px", fontWeight="800", color=color, lineHeight="1")),
+            html.Span(delta or "", style=dict(
+                fontSize="12px", fontWeight="600",
+                color=GREEN if delta and delta.startswith("−") else (RED if delta else MUTED),
+            )),
+        ]),
+        html.P(sub, style=dict(fontSize="11px", color=MUTED, margin="6px 0 0 0"))
+        if sub else None,
+    ])
+
+# ── Layout ─────────────────────────────────────────────────────────────
+app.layout = html.Div(style=dict(background=BG, minHeight="100vh", fontFamily=FONT), children=[
+
+    # ── Nav ────────────────────────────────────────────────────────────
+    html.Div(style=dict(
+        background=NAV_BG, height="60px",
+        display="flex", alignItems="center",
+        padding="0 40px", gap="16px",
+        boxShadow="0 2px 8px rgba(0,0,0,0.15)",
+    ), children=[
+        html.Span("🏈", style=dict(fontSize="22px")),
+        html.Div(children=[
+            html.Span("Defensive Sync Score", style=dict(
+                color="white", fontWeight="800", fontSize="16px", letterSpacing="-0.01em",
+            )),
+            html.Span("  ·  NFL 2021 Season", style=dict(color="#94A3B8", fontSize="13px")),
+        ], style=dict(flex="1")),
+        html.Div(style=dict(display="flex", gap="8px"), children=[
+            badge("122 games", "#60A5FA"),
+            badge("7,510 plays", "#34D399"),
+            badge("32 teams", "#FBBF24"),
+        ]),
+    ]),
+
+    html.Div(style=dict(maxWidth="1560px", margin="0 auto", padding="32px 32px 48px"), children=[
+
+        # ── Page title ─────────────────────────────────────────────────
+        html.Div(style=dict(marginBottom="28px"), children=[
+            html.H1("Secondary Synchronization Dashboard",
+                    style=dict(fontSize="26px", fontWeight="800",
+                               color=TEXT, margin="0 0 6px 0", letterSpacing="-0.02em")),
             html.P(
-                "NFL 2021 · 122 games · 7,510 plays · How synchronized is a defensive secondary?",
-                style={"color": "#8b949e", "margin": "4px 0 0 0", "fontSize": "14px"},
+                "How well does a defensive secondary move as a coordinated unit? "
+                "DSS measures velocity alignment, spacing discipline and orientation divergence — "
+                "frame by frame, snap to pass release.",
+                style=dict(fontSize="14px", color=MUTED, maxWidth="720px", lineHeight="1.6"),
             ),
-        ], style={"marginBottom": "24px"}),
+        ]),
 
-        # ── KPI row ─────────────────────────────────────────────────────
-        html.Div(id="kpi-row", style={"display": "flex", "gap": "12px",
-                                       "flexWrap": "wrap", "marginBottom": "24px"}),
+        # ── Filters ────────────────────────────────────────────────────
+        card(style=dict(marginBottom="24px"), padding="18px 24px", children=[
+            html.Div(style=dict(display="flex", gap="28px", flexWrap="wrap", alignItems="flex-end"), children=[
+                html.Div(children=[
+                    html.P("Coverage Type", style=dict(fontSize="11px", fontWeight="600",
+                                                        color=MUTED, letterSpacing="0.06em",
+                                                        textTransform="uppercase", marginBottom="8px")),
+                    dcc.Checklist(id="f-cov",
+                        options=[{"label": f"  {c}", "value": c} for c in COV_TYPES],
+                        value=COV_TYPES, inline=True,
+                        inputStyle=dict(marginRight="5px", accentColor=ACCENT, width="14px", height="14px"),
+                        labelStyle=dict(color=TEXT, fontSize="13px", marginRight="20px", cursor="pointer"),
+                    ),
+                ]),
+                html.Div(style=dict(minWidth="230px"), children=[
+                    html.P("Down", style=dict(fontSize="11px", fontWeight="600",
+                                              color=MUTED, letterSpacing="0.06em",
+                                              textTransform="uppercase", marginBottom="10px")),
+                    dcc.RangeSlider(id="f-down", min=1, max=4, step=1, value=[1,4],
+                        marks={i: {"label": f"{i}▪", "style": {"color": MUTED, "fontSize": "11px"}} for i in range(1,5)},
+                        tooltip={"placement":"top", "always_visible": False},
+                        updatemode="drag",
+                    ),
+                ]),
+                html.Div(style=dict(minWidth="170px"), children=[
+                    html.P("Focus Team", style=dict(fontSize="11px", fontWeight="600",
+                                                     color=MUTED, letterSpacing="0.06em",
+                                                     textTransform="uppercase", marginBottom="8px")),
+                    dcc.Dropdown(id="f-team",
+                        options=[{"label": t, "value": t} for t in ALL_TEAMS],
+                        value=None, placeholder="All teams", clearable=True,
+                        style=dict(fontSize="13px"),
+                    ),
+                ]),
+                html.Div(style=dict(minWidth="190px"), children=[
+                    html.P("Coverage Scheme", style=dict(fontSize="11px", fontWeight="600",
+                                                          color=MUTED, letterSpacing="0.06em",
+                                                          textTransform="uppercase", marginBottom="8px")),
+                    dcc.Dropdown(id="f-scheme",
+                        options=[{"label": c, "value": c} for c in COV_NAMES],
+                        value=None, placeholder="All schemes", clearable=True,
+                        style=dict(fontSize="13px"),
+                    ),
+                ]),
+            ]),
+        ]),
 
-        # ── Filters ─────────────────────────────────────────────────────
-        html.Div([
-            html.Div([
-                html.Label("Coverage Type", style={"fontSize": "12px", "color": "#8b949e"}),
-                dcc.Checklist(
-                    id="filter-coverage-type",
-                    options=[{"label": f"  {c}", "value": c} for c in ALL_COVERAGES],
-                    value=ALL_COVERAGES,
-                    inline=True,
-                    style={"color": TEXT, "fontSize": "14px"},
-                    inputStyle={"marginRight": "6px"},
-                    labelStyle={"marginRight": "16px"},
-                ),
-            ], style={"flex": "1"}),
-            html.Div([
-                html.Label("Down", style={"fontSize": "12px", "color": "#8b949e"}),
-                dcc.RangeSlider(
-                    id="filter-down",
-                    min=1, max=4, step=1, value=[1, 4],
-                    marks={i: str(i) for i in range(1, 5)},
-                    tooltip={"placement": "bottom"},
-                ),
-            ], style={"flex": "1", "minWidth": "200px"}),
-            html.Div([
-                html.Label("Team (focus)", style={"fontSize": "12px", "color": "#8b949e"}),
-                dcc.Dropdown(
-                    id="filter-team",
-                    options=[{"label": t, "value": t} for t in ALL_TEAMS],
-                    value=None,
-                    placeholder="All teams",
-                    clearable=True,
-                    style={"background": CARD_BG, "color": TEXT, "fontSize": "13px"},
-                ),
-            ], style={"flex": "1", "minWidth": "150px"}),
-        ], style={
-            "background": CARD_BG, "border": f"1px solid {BORDER}",
-            "borderRadius": "8px", "padding": "16px 20px",
-            "display": "flex", "gap": "24px", "flexWrap": "wrap", "marginBottom": "20px",
-        }),
+        # ── KPI strip ──────────────────────────────────────────────────
+        html.Div(id="kpis", style=dict(
+            display="flex", gap="14px", flexWrap="wrap", marginBottom="24px",
+        )),
 
-        # ── Charts row 1 ────────────────────────────────────────────────
-        html.Div([
-            html.Div([
-                html.H3("Team Ranking", style={"color": TEXT, "fontSize": "15px", "margin": "0 0 12px 0"}),
-                dcc.Graph(id="chart-ranking", style={"height": "500px"}),
-            ], style={"flex": "1", "minWidth": "300px", "background": CARD_BG,
-                      "border": f"1px solid {BORDER}", "borderRadius": "8px", "padding": "16px"}),
+        # ── Row 1: Ranking + Scatter ────────────────────────────────────
+        html.Div(style=dict(display="grid", gridTemplateColumns="1fr 1.5fr",
+                            gap="20px", marginBottom="20px"), children=[
+            card([
+                section_title("Team Ranking", "Higher DSS = more synchronized secondary"),
+                dcc.Graph(id="g-rank", style=dict(height="500px"),
+                          config=dict(displayModeBar=False)),
+            ]),
+            card([
+                section_title("DSS vs Completion Rate", "Does synchronization actually reduce completions?"),
+                dcc.Graph(id="g-scatter", style=dict(height="500px"),
+                          config=dict(displayModeBar=False)),
+            ]),
+        ]),
 
-            html.Div([
-                html.H3("DSS vs Completion Rate", style={"color": TEXT, "fontSize": "15px", "margin": "0 0 12px 0"}),
-                dcc.Graph(id="chart-scatter", style={"height": "500px"}),
-            ], style={"flex": "1.2", "minWidth": "300px", "background": CARD_BG,
-                      "border": f"1px solid {BORDER}", "borderRadius": "8px", "padding": "16px"}),
-        ], style={"display": "flex", "gap": "16px", "marginBottom": "16px"}),
+        # ── Row 2: Box + Heatmap ────────────────────────────────────────
+        html.Div(style=dict(display="grid", gridTemplateColumns="1fr 1.7fr",
+                            gap="20px", marginBottom="20px"), children=[
+            card([
+                section_title("DSS Distribution by Coverage", "Man coverage is the hardest to synchronize"),
+                dcc.Graph(id="g-box", style=dict(height="360px"),
+                          config=dict(displayModeBar=False)),
+            ]),
+            card([
+                section_title("Coverage × Down Heatmap",
+                              "Red = low sync → high completion risk · Green = well-coordinated"),
+                dcc.Graph(id="g-heat", style=dict(height="360px"),
+                          config=dict(displayModeBar=False)),
+            ]),
+        ]),
 
-        # ── Charts row 2 ────────────────────────────────────────────────
-        html.Div([
-            html.Div([
-                html.H3("DSS by Coverage Type", style={"color": TEXT, "fontSize": "15px", "margin": "0 0 12px 0"}),
-                dcc.Graph(id="chart-box", style={"height": "380px"}),
-            ], style={"flex": "1", "minWidth": "300px", "background": CARD_BG,
-                      "border": f"1px solid {BORDER}", "borderRadius": "8px", "padding": "16px"}),
+        # ── Row 3: Sub-scores + Legend card ────────────────────────────
+        html.Div(style=dict(display="grid", gridTemplateColumns="1.8fr 1fr",
+                            gap="20px", marginBottom="20px"), children=[
+            card([
+                section_title("Sub-score Breakdown — Top 5 Teams",
+                              "VA · SD · OD breakdown per team (or focused team)"),
+                dcc.Graph(id="g-sub", style=dict(height="320px"),
+                          config=dict(displayModeBar=False)),
+            ]),
+            card([
+                section_title("How to Read DSS"),
+                html.Div(style=dict(display="flex", flexDirection="column", gap="16px"), children=[
+                    html.Div(style=dict(
+                        background="#EFF6FF", borderRadius="10px", padding="14px 16px",
+                        borderLeft=f"3px solid {ACCENT}",
+                    ), children=[
+                        html.Span("VA — Velocity Alignment", style=dict(color=ACCENT, fontWeight="700", fontSize="13px")),
+                        html.P("Do DBs move in the same direction post-snap?",
+                               style=dict(color=MUTED, fontSize="12px", margin="4px 0 0 0", lineHeight="1.5")),
+                    ]),
+                    html.Div(style=dict(
+                        background="#F5F3FF", borderRadius="10px", padding="14px 16px",
+                        borderLeft="3px solid #7C3AED",
+                    ), children=[
+                        html.Span("SD — Spacing Discipline", style=dict(color="#7C3AED", fontWeight="700", fontSize="13px")),
+                        html.P("Do they maintain their formation width?",
+                               style=dict(color=MUTED, fontSize="12px", margin="4px 0 0 0", lineHeight="1.5")),
+                    ]),
+                    html.Div(style=dict(
+                        background="#F0FDF4", borderRadius="10px", padding="14px 16px",
+                        borderLeft=f"3px solid {GREEN}",
+                    ), children=[
+                        html.Span("OD — Orientation Divergence", style=dict(color=GREEN, fontWeight="700", fontSize="13px")),
+                        html.P("Is each DB tracking his own receiver? (inverted — divergence is good)",
+                               style=dict(color=MUTED, fontSize="12px", margin="4px 0 0 0", lineHeight="1.5")),
+                    ]),
+                    html.Div(style=dict(
+                        background="#FFFBEB", borderRadius="10px", padding="14px 16px",
+                        borderLeft=f"3px solid {AMBER}",
+                    ), children=[
+                        html.Span("⚡ Key insight", style=dict(color=AMBER, fontWeight="700", fontSize="13px")),
+                        html.P("DBs staring at the QB (high orientation coherence) let more passes through. "
+                               "True coverage means each DB watching his own man.",
+                               style=dict(color=MUTED, fontSize="12px", margin="4px 0 0 0", lineHeight="1.5")),
+                    ]),
+                    html.Div(style=dict(
+                        background=BG, borderRadius="8px", padding="10px 14px",
+                        fontFamily="'JetBrains Mono', 'Fira Code', monospace",
+                        fontSize="12px", color=TEXT, border=f"1px solid {BORDER}",
+                    ), children=[
+                        html.Span("DSS = 100 × (0.40·VA + 0.30·SD + 0.30·OD)"),
+                    ]),
+                ]),
+            ]),
+        ]),
 
-            html.Div([
-                html.H3("Coverage Heatmap (DSS by scheme × down)", style={"color": TEXT, "fontSize": "15px", "margin": "0 0 12px 0"}),
-                dcc.Graph(id="chart-heatmap", style={"height": "380px"}),
-            ], style={"flex": "1.5", "minWidth": "300px", "background": CARD_BG,
-                      "border": f"1px solid {BORDER}", "borderRadius": "8px", "padding": "16px"}),
-        ], style={"display": "flex", "gap": "16px", "marginBottom": "16px"}),
-
-        # ── Sub-scores breakdown ─────────────────────────────────────────
-        html.Div([
-            html.H3("Sub-score Breakdown (VA · SD · OD)", style={"color": TEXT, "fontSize": "15px", "margin": "0 0 12px 0"}),
-            dcc.Graph(id="chart-subscores", style={"height": "300px"}),
-        ], style={"background": CARD_BG, "border": f"1px solid {BORDER}",
-                  "borderRadius": "8px", "padding": "16px", "marginBottom": "16px"}),
-
-        # ── Footer ──────────────────────────────────────────────────────
+        # ── Footer ─────────────────────────────────────────────────────
         html.P(
-            "DSS = 100 × (0.40·VA + 0.30·SD + 0.30·OD)  ·  "
-            "VA: velocity alignment  ·  SD: spacing discipline  ·  OD: orientation divergence  ·  "
-            "Data: NFL Big Data Bowl 2021",
-            style={"color": "#8b949e", "fontSize": "11px", "textAlign": "center", "marginTop": "8px"},
+            "Data: NFL Big Data Bowl 2021 · ThompsonJamesBliss/nfl-big-data-bowl-regional-event-data · "
+            "github.com/florianhemery/nfl-pocket-collapse",
+            style=dict(textAlign="center", color=MUTED, fontSize="11px", paddingTop="8px"),
         ),
-    ],
-)
+    ]),
+])
 
 
-def filter_df(coverage_types, down_range):
-    filtered = df[
-        df["coverageType"].isin(coverage_types) &
-        df["down"].between(down_range[0], down_range[1])
-    ]
-    return filtered
-
-
+# ── Callbacks ─────────────────────────────────────────────────────────
 @app.callback(
-    Output("kpi-row", "children"),
-    Output("chart-ranking", "figure"),
-    Output("chart-scatter", "figure"),
-    Output("chart-box", "figure"),
-    Output("chart-heatmap", "figure"),
-    Output("chart-subscores", "figure"),
-    Input("filter-coverage-type", "value"),
-    Input("filter-down", "value"),
-    Input("filter-team", "value"),
+    Output("kpis",     "children"),
+    Output("g-rank",   "figure"),
+    Output("g-scatter","figure"),
+    Output("g-box",    "figure"),
+    Output("g-heat",   "figure"),
+    Output("g-sub",    "figure"),
+    Input("f-cov",    "value"),
+    Input("f-down",   "value"),
+    Input("f-team",   "value"),
+    Input("f-scheme", "value"),
 )
-def update_all(coverage_types, down_range, focus_team):
-    if not coverage_types:
-        coverage_types = ALL_COVERAGES
+def update(cov_types, down_range, focus_team, scheme):
+    if not cov_types:
+        cov_types = COV_TYPES
 
-    fdf = filter_df(coverage_types, down_range)
-    if focus_team:
-        fdf_team = fdf[fdf["defensiveTeam"] == focus_team]
-    else:
-        fdf_team = fdf
+    fdf = df[df["coverageType"].isin(cov_types) & df["down"].between(down_range[0], down_range[1])].copy()
+    if scheme:
+        fdf = fdf[fdf["coverage"] == scheme]
+    focused = fdf[fdf["defensiveTeam"] == focus_team] if focus_team else fdf
 
-    LAYOUT = dict(
-        paper_bgcolor=DARK_BG, plot_bgcolor=CARD_BG,
-        font=dict(color=TEXT, family="Inter, sans-serif"),
-        margin=dict(t=20, b=40, l=40, r=20),
-        xaxis=dict(gridcolor=BORDER, zerolinecolor=BORDER),
-        yaxis=dict(gridcolor=BORDER, zerolinecolor=BORDER),
-    )
+    L = PLOT_LAYOUT.copy()
 
-    # ── KPIs ────────────────────────────────────────────────────────────
-    n_plays = len(fdf_team) if focus_team else len(fdf)
-    dss_mean = fdf_team["dss"].mean() if focus_team else fdf["dss"].mean()
-    comp_rate = fdf_team["completed"].mean() if focus_team else fdf["completed"].mean()
-    hi = fdf[fdf["dss"] >= fdf["dss"].median()]
-    lo = fdf[fdf["dss"] < fdf["dss"].median()]
-    delta = (hi["completed"].mean() - lo["completed"].mean()) * 100
+    # ── KPIs ──────────────────────────────────────────────────────────
+    n_plays   = len(focused)
+    dss_mean  = focused["dss"].mean() if n_plays else 0
+    comp_rate = focused["completed"].mean() if n_plays else 0
+    hi  = fdf[fdf["dss"] >= fdf["dss"].median()]
+    lo  = fdf[fdf["dss"] <  fdf["dss"].median()]
+    delta_pp  = (hi["completed"].mean() - lo["completed"].mean()) * 100
+    best_team = fdf.groupby("defensiveTeam")["dss"].mean().idxmax() if len(fdf) else "—"
+    best_val  = fdf.groupby("defensiveTeam")["dss"].mean().max()    if len(fdf) else 0
 
-    kpis = [
-        kpi_card("Plays analyzed", f"{n_plays:,}"),
-        kpi_card("Avg DSS", f"{dss_mean:.1f}", "/ 100", ACCENT),
-        kpi_card("Completion rate", f"{comp_rate:.1%}", "in selection"),
-        kpi_card("High vs Low DSS delta", f"{delta:+.1f}pp", "completion rate", GREEN if delta < 0 else RED),
-        kpi_card("Best team", fdf.groupby("defensiveTeam")["dss"].mean().idxmax(),
-                 f"DSS {fdf.groupby('defensiveTeam')['dss'].mean().max():.1f}", GREEN),
+    kpis_out = [
+        kpi("Plays Analyzed", f"{n_plays:,}", sub="in current filter", color=ACCENT, border_color=ACCENT),
+        kpi("Avg DSS", f"{dss_mean:.1f}", sub="/ 100  ·  higher = better", color="#D97706", border_color=AMBER),
+        kpi("Completion Rate", f"{comp_rate:.1%}", sub="allowed by defense", color="#7C3AED", border_color="#7C3AED"),
+        kpi("Sync Effect",
+            f"{abs(delta_pp):.1f} pp",
+            delta=f"−{abs(delta_pp):.1f}pp" if delta_pp < 0 else f"+{abs(delta_pp):.1f}pp",
+            sub="high vs low DSS delta",
+            color=GREEN if delta_pp < 0 else RED,
+            border_color=GREEN if delta_pp < 0 else RED),
+        kpi("Best Secondary", best_team, sub=f"DSS {best_val:.1f} / 100", color=GREEN, border_color=GREEN),
     ]
 
-    # ── Ranking bar ──────────────────────────────────────────────────────
-    team_agg = fdf.groupby("defensiveTeam")["dss"].agg(["mean", "count"]).reset_index()
-    team_agg = team_agg[team_agg["count"] >= 3].sort_values("mean", ascending=True)
+    # ── Ranking ──────────────────────────────────────────────────────
+    ta = (fdf.groupby("defensiveTeam")["dss"]
+          .agg(["mean","std","count"]).reset_index()
+          .query("count >= 3")
+          .sort_values("mean", ascending=True))
 
-    bar_colors = [ACCENT if focus_team and row["defensiveTeam"] == focus_team else
-                  px.colors.sample_colorscale("RdYlGn",
-                    [(row["mean"] - team_agg["mean"].min()) /
-                     max(team_agg["mean"].max() - team_agg["mean"].min(), 0.01)])[0]
-                  for _, row in team_agg.iterrows()]
+    norm = ((ta["mean"] - ta["mean"].min()) /
+            max(ta["mean"].max() - ta["mean"].min(), 0.01))
+
+    bar_colors = [
+        ACCENT if (focus_team and r["defensiveTeam"] == focus_team)
+        else px.colors.sample_colorscale("RdYlGn", [float(norm.iloc[i])])[0]
+        for i, (_, r) in enumerate(ta.iterrows())
+    ]
 
     fig_rank = go.Figure(go.Bar(
-        x=team_agg["mean"], y=team_agg["defensiveTeam"], orientation="h",
-        marker_color=bar_colors,
-        customdata=team_agg["count"].values,
-        hovertemplate="<b>%{y}</b><br>DSS: %{x:.1f}<br>Plays: %{customdata}<extra></extra>",
+        x=ta["mean"], y=ta["defensiveTeam"], orientation="h",
+        marker=dict(color=bar_colors, line=dict(color="white", width=0.5),
+                    cornerradius=4),
+        error_x=dict(type="data", array=ta["std"].tolist(),
+                     color="#CBD5E0", thickness=1.5),
+        customdata=ta["count"].values,
+        hovertemplate="<b>%{y}</b><br>DSS: <b>%{x:.1f}</b><br>n=%{customdata}<extra></extra>",
     ))
-    fig_rank.update_layout(**LAYOUT, showlegend=False)
-    fig_rank.update_xaxes(title_text="DSS", range=[48, 62])
-    fig_rank.update_yaxes(tickfont=dict(size=9))
+    fig_rank.update_layout(**L, showlegend=False, margin=dict(t=8, b=44, l=10, r=90))
+    fig_rank.update_xaxes(title_text="Defensive Sync Score", range=[46, 64])
+    fig_rank.update_yaxes(tickfont=dict(size=10))
 
-    # ── Scatter DSS vs completion ─────────────────────────────────────────
-    fig_scatter = go.Figure()
-    for ct, color in [("Man", "#FF5722"), ("Zone", "#2196F3")]:
-        if ct not in coverage_types:
-            continue
-        sub = fdf[fdf["coverageType"] == ct].copy()
+    # ── Scatter ──────────────────────────────────────────────────────
+    fig_sc = go.Figure()
+    for ct in cov_types:
+        sub = fdf[fdf["coverageType"] == ct]
         if len(sub) < 10:
             continue
-        binned = sub.groupby(pd.cut(sub["dss"], bins=10)).agg(
-            dss=("dss", "mean"), comp=("completed", "mean"), n=("completed", "count")
-        ).reset_index(drop=True).dropna()
+        binned = (sub.groupby(pd.cut(sub["dss"], bins=10))
+                  .agg(dss=("dss","mean"), comp=("completed","mean"), n=("completed","count"))
+                  .reset_index(drop=True).dropna())
         binned = binned[binned["n"] >= 5]
-        fig_scatter.add_trace(go.Scatter(
-            x=binned["dss"], y=binned["comp"],
-            mode="markers+lines",
-            marker=dict(size=binned["n"] / binned["n"].max() * 18 + 6, color=color, opacity=0.8),
-            line=dict(color=color, dash="dot"),
-            name=ct,
-            hovertemplate=f"<b>{ct}</b><br>DSS: %{{x:.1f}}<br>Comp: %{{y:.1%}}<extra></extra>",
+        c = COV_COLORS.get(ct, "#888")
+        fig_sc.add_trace(go.Scatter(
+            x=binned["dss"], y=binned["comp"], mode="markers+lines", name=ct,
+            marker=dict(size=binned["n"]/binned["n"].max()*18+8,
+                        color=c, opacity=0.85,
+                        line=dict(color="white", width=2)),
+            line=dict(color=c, width=2.5, dash="dot"),
+            hovertemplate=f"<b>{ct}</b><br>DSS: %{{x:.1f}}<br>Completion: %{{y:.1%}}<br>n=%{{text}}<extra></extra>",
+            text=binned["n"].astype(str),
         ))
-    fig_scatter.update_layout(**LAYOUT)
-    fig_scatter.update_xaxes(title_text="DSS (binned)")
-    fig_scatter.update_yaxes(title_text="Completion Rate", tickformat=".0%")
 
-    # ── Box plot ─────────────────────────────────────────────────────────
+    # Regression annotation
+    if len(fdf) > 20:
+        b_all = fdf.groupby(pd.cut(fdf["dss"], bins=12)).agg(
+            dss=("dss","mean"), comp=("completed","mean"), n=("completed","count")
+        ).reset_index(drop=True).dropna()
+        b_all = b_all[b_all["n"] >= 5]
+        if len(b_all) > 2:
+            z = np.polyfit(b_all["dss"], b_all["comp"], 1)
+            x_fit = np.linspace(b_all["dss"].min(), b_all["dss"].max(), 80)
+            fig_sc.add_trace(go.Scatter(
+                x=x_fit, y=np.polyval(z, x_fit),
+                mode="lines", name="Overall trend",
+                line=dict(color="#94A3B8", width=2, dash="longdash"),
+                hoverinfo="skip",
+            ))
+
+    fig_sc.update_layout(**L)
+    fig_sc.update_xaxes(title_text="Defensive Sync Score (binned)")
+    fig_sc.update_yaxes(title_text="Completion Rate", tickformat=".0%")
+    fig_sc.add_annotation(
+        text="← Higher sync, fewer completions", x=0.02, y=0.97,
+        xref="paper", yref="paper", showarrow=False,
+        font=dict(color=GREEN, size=11, family=FONT), align="left",
+    )
+
+    # ── Violin/Box ───────────────────────────────────────────────────
     fig_box = go.Figure()
-    palette = {"Man": "#FF5722", "Zone": "#2196F3", "Other": "#9C27B0"}
-    for ct in coverage_types:
+    for ct in cov_types:
         sub = fdf[fdf["coverageType"] == ct]
         if len(sub) < 5:
             continue
-        fig_box.add_trace(go.Box(
-            y=sub["dss"], name=ct, marker_color=palette.get(ct, "#888"),
-            boxpoints="outliers", hovertemplate=f"<b>{ct}</b><br>DSS: %{{y:.1f}}<extra></extra>",
+        c = COV_COLORS.get(ct, "#888")
+        fig_box.add_trace(go.Violin(
+            y=sub["dss"], name=ct,
+            box_visible=True, meanline_visible=True,
+            fillcolor=c + "30", line_color=c,
+            meanline_color=c, meanline_width=2,
+            opacity=0.9,
+            hovertemplate=f"<b>{ct}</b><br>DSS: %{{y:.1f}}<extra></extra>",
         ))
-    fig_box.update_layout(**LAYOUT)
-    fig_box.update_yaxes(title_text="DSS")
+    fig_box.update_layout(**L, violingap=0.25)
+    fig_box.update_yaxes(title_text="DSS", range=[20, 90])
 
-    # ── Heatmap ───────────────────────────────────────────────────────────
+    # ── Heatmap ──────────────────────────────────────────────────────
     pivot = fdf.pivot_table(values="dss", index="coverage", columns="down", aggfunc="mean")
+    annots = []
+    for i, row_label in enumerate(pivot.index):
+        for j, col in enumerate(pivot.columns):
+            val = pivot.loc[row_label, col]
+            if not np.isnan(val):
+                annots.append(dict(
+                    x=f"Down {int(col)}", y=row_label,
+                    text=f"<b>{val:.0f}</b>", showarrow=False,
+                    font=dict(color="white" if val < 54 else "#1A202C", size=11, family=FONT),
+                ))
+
     fig_hm = go.Figure(go.Heatmap(
-        z=pivot.values, x=[f"Down {int(d)}" for d in pivot.columns],
-        y=pivot.index.tolist(), colorscale="RdYlGn",
-        text=np.where(np.isnan(pivot.values), "", np.round(pivot.values, 1).astype(str)),
-        texttemplate="%{text}",
-        hovertemplate="Coverage: %{y}<br>%{x}<br>DSS: %{z:.1f}<extra></extra>",
-        colorbar=dict(len=0.9),
+        z=pivot.values,
+        x=[f"Down {int(d)}" for d in pivot.columns],
+        y=pivot.index.tolist(),
+        colorscale=[
+            [0.0, "#FEE2E2"], [0.25, "#FCA5A5"], [0.4, "#FBBF24"],
+            [0.6, "#86EFAC"], [0.8, "#4ADE80"], [1.0, "#16A34A"],
+        ],
+        zmin=42, zmax=68,
+        showscale=True,
+        colorbar=dict(
+            len=0.85, thickness=14, tickfont=dict(color=MUTED, size=10),
+            title=dict(text="DSS", font=dict(color=MUTED, size=11)),
+            outlinewidth=0,
+        ),
+        hovertemplate="<b>%{y}</b> · %{x}<br>DSS: <b>%{z:.1f}</b><extra></extra>",
     ))
-    fig_hm.update_layout(**LAYOUT, margin=dict(t=20, b=40, l=140, r=20))
+    fig_hm.update_layout(**L, margin=dict(t=8, b=44, l=150, r=60), annotations=annots)
 
-    # ── Sub-scores team radar / bar ────────────────────────────────────────
-    if focus_team:
-        sub_data = fdf[fdf["defensiveTeam"] == focus_team]
+    # ── Sub-scores ───────────────────────────────────────────────────
+    if focus_team and len(fdf[fdf["defensiveTeam"] == focus_team]) > 0:
+        teams_show = [focus_team]
     else:
-        top5 = fdf.groupby("defensiveTeam")["dss"].mean().nlargest(5).index
-        sub_data = fdf[fdf["defensiveTeam"].isin(top5)]
+        teams_show = fdf.groupby("defensiveTeam")["dss"].mean().nlargest(5).index.tolist()
 
-    sub_agg = sub_data.groupby("defensiveTeam")[["va", "sd", "od", "dss"]].mean().reset_index()
+    sub_agg = (fdf[fdf["defensiveTeam"].isin(teams_show)]
+               .groupby("defensiveTeam")[["va","sd","od","dss"]]
+               .mean().reset_index())
+
+    sub_palette = [ACCENT, "#7C3AED", GREEN, AMBER, "#EF4444"]
+    cat_labels  = ["Velocity Alignment (VA)", "Spacing Discipline (SD)",
+                   "Orientation Divergence (OD)", "DSS (composite)"]
     fig_sub = go.Figure()
-    palette2 = px.colors.qualitative.Set2
     for i, (_, row) in enumerate(sub_agg.iterrows()):
+        c = sub_palette[i % len(sub_palette)]
         fig_sub.add_trace(go.Bar(
             name=row["defensiveTeam"],
-            x=["Velocity Align (VA)", "Spacing Discipline (SD)", "Orient. Divergence (OD)", "DSS (composite)"],
+            x=cat_labels,
             y=[row["va"], row["sd"], row["od"], row["dss"]],
-            marker_color=palette2[i % len(palette2)],
+            marker=dict(color=c, opacity=0.88, line=dict(width=0),
+                        cornerradius=4),
+            hovertemplate=f"<b>{row['defensiveTeam']}</b><br>%{{x}}: <b>%{{y:.1f}}</b><extra></extra>",
         ))
-    fig_sub.update_layout(**LAYOUT, barmode="group", legend=dict(bgcolor="rgba(0,0,0,0.3)"))
-    fig_sub.update_yaxes(title_text="Score (0–100)", range=[0, 100])
+    fig_sub.update_layout(
+        **L, barmode="group",
+        yaxis=dict(range=[0, 100], title_text="Score (0–100)",
+                   gridcolor="#EDF2F7", zerolinecolor="#CBD5E0"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    xanchor="right", x=1, font=dict(size=12)),
+    )
 
-    return kpis, fig_rank, fig_scatter, fig_box, fig_hm, fig_sub
+    return kpis_out, fig_rank, fig_sc, fig_box, fig_hm, fig_sub
 
 
 if __name__ == "__main__":
-    print("\n🏈 DSS Live Demo starting...")
-    print("   Open http://127.0.0.1:8050 in your browser\n")
+    print(f"\n🏈  DSS Dashboard  →  http://127.0.0.1:8050\n")
     app.run(debug=True, host="127.0.0.1", port=8050)
