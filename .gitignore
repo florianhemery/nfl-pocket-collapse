@@ -1,0 +1,6 @@
+data/tracking/*.csv
+*.pyc
+__pycache__/
+output/*.png
+output/*.gif
+output/*.mp4
