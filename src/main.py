@@ -1,130 +1,144 @@
-"""Main pipeline: load data, compute PCI, generate visualizations."""
+"""Main pipeline: load data, compute DSS, generate visualizations."""
 
 import sys
 from pathlib import Path
 
-# Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import pandas as pd
 import numpy as np
-from pci import load_tracking_data, identify_qb, compute_collapse_rate
-from visualization import animate_play, plot_pci_ranking
+from dss import (
+    load_metadata,
+    load_tracking_data,
+    identify_secondary,
+    compute_dss_all_plays,
+)
+from dss_visualization import (
+    animate_play_dss,
+    plot_dss_team_ranking,
+    plot_dss_vs_outcome,
+    plot_dss_heatmap,
+)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 
 
 def main():
-    print("=== Pocket Collapse Index (PCI) Pipeline ===\n")
+    print("=" * 60)
+    print("  Defensive Sync Score (DSS) Pipeline")
+    print("=" * 60 + "\n")
 
     # 1. Load metadata
-    print("Loading metadata...")
-    games = pd.read_csv(DATA_DIR / "games.csv")
-    plays = pd.read_csv(DATA_DIR / "plays.csv")
-    players = pd.read_csv(DATA_DIR / "players.csv")
-    print(f"  Games: {len(games)} | Plays: {len(plays)} | Players: {len(players)}")
+    print("[1/6] Loading metadata...")
+    meta = load_metadata(DATA_DIR)
+    games = meta["games"]
+    plays = meta["plays"]
+    players = meta["players"]
+    scouting = meta["scouting"]
+    print(f"  Games: {len(games)} | Plays: {len(plays)} | "
+          f"Players: {len(players)} | Scouting rows: {len(scouting)}")
 
     # 2. Load tracking data
-    print("Loading tracking data...")
+    print("\n[2/6] Loading tracking data...")
     tracking = load_tracking_data(DATA_DIR / "tracking")
     print(f"  Tracking rows: {len(tracking):,}")
-    print(f"  Games in tracking: {tracking['gameId'].nunique()}")
+    print(f"  Games: {tracking['gameId'].nunique()}")
     print(f"  Columns: {list(tracking.columns)}")
 
-    # 3. Filter to pass plays
-    print("\nFiltering to pass plays...")
-    pass_results = ["C", "I", "S", "IN"]
-    pass_plays = plays[plays["passResult"].isin(pass_results)]
-    print(f"  Pass plays: {len(pass_plays)}")
-
-    # Merge tracking with play info to get possessionTeam
-    tracking_merged = tracking.merge(
-        pass_plays[["gameId", "playId", "possessionTeam", "defensiveTeam",
-                     "down", "yardsToGo", "passResult", "playResult"]],
-        on=["gameId", "playId"],
-        how="inner",
-    )
-    print(f"  Tracking rows on pass plays: {len(tracking_merged):,}")
-
-    # 4. Determine offensive/defensive team per frame
-    games_merge = games[["gameId", "homeTeamAbbr", "visitorTeamAbbr"]]
-    tracking_merged = tracking_merged.merge(games_merge, on="gameId", how="left")
-
-    tracking_merged["offDefTeam"] = np.where(
-        tracking_merged["possessionTeam"] == tracking_merged["homeTeamAbbr"],
-        "home", "away"
-    )
-    tracking_merged["teamRole"] = np.where(
-        tracking_merged["team"] == tracking_merged["offDefTeam"],
-        "off", "def"
+    # Add player positions to tracking
+    tracking = tracking.merge(
+        players[["nflId", "officialPosition"]].rename(
+            columns={"officialPosition": "position"}
+        ),
+        on="nflId",
+        how="left",
     )
 
-    # 5. Compute PCI for each play
-    print("\nComputing Pocket Collapse Index...")
-    results = []
+    # 3. Compute DSS for all plays
+    print("\n[3/6] Computing Defensive Sync Score...")
+    dss_df = compute_dss_all_plays(tracking, scouting, players, plays, games)
+    print(f"  Plays with DSS: {len(dss_df)}")
+    print(f"  DSS range: {dss_df['dss'].min():.1f} — {dss_df['dss'].max():.1f}")
+    print(f"  DSS mean: {dss_df['dss'].mean():.1f}")
 
-    for (gid, pid), play_df in tracking_merged.groupby(["gameId", "playId"]):
-        qb_rows = play_df[play_df["position"] == "QB"]
-        if qb_rows.empty:
-            continue
-        qb_id = qb_rows["nflId"].iloc[0]
+    # 4. Analysis & validation
+    print("\n[4/6] Statistical validation...")
+    # Overall: DSS vs completion rate
+    high_dss = dss_df[dss_df["dss"] >= dss_df["dss"].median()]
+    low_dss = dss_df[dss_df["dss"] < dss_df["dss"].median()]
+    print(f"  High DSS plays: completion rate = {high_dss['completed'].mean():.3f}")
+    print(f"  Low DSS plays:  completion rate = {low_dss['completed'].mean():.3f}")
 
-        result = compute_collapse_rate(play_df, qb_id)
-        if result is None:
-            continue
+    # By coverage type
+    for ct in ["Man", "Zone"]:
+        subset = dss_df[dss_df["coverageType"] == ct]
+        if len(subset) > 0:
+            hi = subset[subset["dss"] >= subset["dss"].median()]
+            lo = subset[subset["dss"] < subset["dss"].median()]
+            print(f"  {ct}: High DSS comp={hi['completed'].mean():.3f}, "
+                  f"Low DSS comp={lo['completed'].mean():.3f} (n={len(subset)})")
 
-        play_info = pass_plays[
-            (pass_plays["gameId"] == gid) & (pass_plays["playId"] == pid)
-        ].iloc[0]
+    # Correlation
+    corr = dss_df["dss"].corr(dss_df["completed"])
+    print(f"  Pearson(DSS, completed): {corr:.4f}")
 
-        result["gameId"] = gid
-        result["playId"] = pid
-        result["team"] = play_info["possessionTeam"]
-        result["opponent"] = play_info["defensiveTeam"]
-        result["passResult"] = play_info["passResult"]
-        result["playResult"] = play_info["playResult"]
-        results.append(result)
+    # 5. Generate visualizations
+    print("\n[5/6] Generating visualizations...")
 
-    pci_df = pd.DataFrame(results)
-    print(f"  Plays with PCI computed: {len(pci_df)}")
-
-    if len(pci_df) == 0:
-        print("  WARNING: No plays could be computed. Check event names in data.")
-        print(f"  Unique events: {tracking_merged['event'].unique()}")
-        return
-
-    # 6. Generate visualizations
-    print("\nGenerating visualizations...")
-
-    team_chart = plot_pci_ranking(
-        pci_df,
-        output_path=str(OUTPUT_DIR / "pci_ranking.png"),
-        group_by="team",
-        title="Pocket Collapse Index - Team Ranking (lower = better pass protection)",
+    team_chart = plot_dss_team_ranking(
+        dss_df, output_path=str(OUTPUT_DIR / "dss_team_ranking.png")
     )
-    print(f"  Team ranking saved: {team_chart}")
+    print(f"  Team ranking: {team_chart}")
 
-    # Animate the worst pocket collapse play
-    worst_play = pci_df.loc[pci_df["pci"].idxmax()]
-    worst_play_df = tracking_merged[
-        (tracking_merged["gameId"] == worst_play["gameId"])
-        & (tracking_merged["playId"] == worst_play["playId"])
+    outcome_chart = plot_dss_vs_outcome(
+        dss_df, output_path=str(OUTPUT_DIR / "dss_vs_completion.png")
+    )
+    print(f"  DSS vs outcome: {outcome_chart}")
+
+    heatmap_chart = plot_dss_heatmap(
+        dss_df, output_path=str(OUTPUT_DIR / "dss_heatmap.png")
+    )
+    print(f"  Heatmap: {heatmap_chart}")
+
+    # Animate the most synchronized play
+    best_play = dss_df.loc[dss_df["dss"].idxmax()]
+    print(f"\n  Best DSS play: {best_play['defensiveTeam']} "
+          f"(DSS={best_play['dss']:.1f}, VA={best_play['va']:.1f}, "
+          f"SD={best_play['sd']:.1f}, OD={best_play['od']:.1f})")
+
+    # Rebuild secondary tracking for this play
+    secondary_df = identify_secondary(tracking, scouting, players)
+    best_sec = secondary_df[
+        (secondary_df["gameId"] == best_play["gameId"])
+        & (secondary_df["playId"] == best_play["playId"])
     ]
-    qb_id = worst_play_df[worst_play_df["position"] == "QB"]["nflId"].iloc[0]
+    best_full = tracking[
+        (tracking["gameId"] == best_play["gameId"])
+        & (tracking["playId"] == best_play["playId"])
+    ]
 
-    anim_path = animate_play(
-        worst_play_df,
-        qb_id,
-        output_path=str(OUTPUT_DIR / "worst_collapse.gif"),
-        title=f"Worst Pocket Collapse - {worst_play['team']} (PCI={worst_play['pci']:.3f})",
+    anim_path = animate_play_dss(
+        best_sec, best_full, best_play.to_dict(),
+        output_path=str(OUTPUT_DIR / "dss_best_sync.gif"),
+        title=f"Best Secondary Sync — {best_play['defensiveTeam']} "
+              f"({best_play['coverage']}, DSS={best_play['dss']:.1f})",
     )
-    print(f"  Animation saved: {anim_path}")
+    print(f"  Animation: {anim_path}")
 
-    # 7. Save results
-    pci_df.to_csv(OUTPUT_DIR / "pci_results.csv", index=False)
-    print(f"\nResults saved to {OUTPUT_DIR / 'pci_results.csv'}")
-    print("\n=== Done ===")
+    # 6. Save results
+    print("\n[6/6] Saving results...")
+    dss_df.to_csv(OUTPUT_DIR / "dss_results.csv", index=False)
+    print(f"  Results CSV: {OUTPUT_DIR / 'dss_results.csv'}")
+
+    print("\n" + "=" * 60)
+    print("  Pipeline complete!")
+    print("=" * 60)
+    print(f"\n  Plays analyzed: {len(dss_df)}")
+    print(f"  Teams ranked: {dss_df['defensiveTeam'].nunique()}")
+    print(f"  DSS mean: {dss_df['dss'].mean():.1f} / 100")
+    print(f"  Correlation DSS↔completion: {corr:.4f}")
+    print(f"\n  Outputs in: {OUTPUT_DIR}/")
 
 
 if __name__ == "__main__":
