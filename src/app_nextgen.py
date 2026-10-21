@@ -93,8 +93,21 @@ class AI_Provider:
                 if not MISTRAL_AVAILABLE:
                     from mistralai.client import Mistral as Mistral_lib
                     globals()['Mistral'] = Mistral_lib
+                
+                # Validate and fix model name
+                if model:
+                    model = model.strip()
+                    # If user just typed "mistral" without a specific model, use default
+                    if model.lower() == 'mistral':
+                        model = 'mistral-large-latest'
+                    # Add -latest suffix if missing
+                    elif model in ['mistral-large', 'mistral-small', 'mistral-medium']:
+                        model = f'{model}-latest'
+                else:
+                    model = 'mistral-large-latest'
+                
                 self.client = Mistral(api_key=api_key)
-                self.model = model or 'mistral-large-latest'
+                self.model = model
                 return True, f"✅ Connected to Mistral ({self.model})"
             
             return False, "Unknown provider"
@@ -450,12 +463,10 @@ app.layout = dbc.Container([
                 style={'marginBottom': '15px'}
             ),
             
-            dbc.Input(
-                id='ai-model-input',
-                type='text',
-                placeholder="Model name (optional, uses default if empty)",
-                style={'marginBottom': '15px'}
-            ),
+            # Dynamic model selector that changes based on provider
+            html.Div(id='model-selector-container', children=[
+                html.P("Select a provider first", style={'color': COLORS['text_dim'], 'fontSize': '12px'})
+            ], style={'marginBottom': '15px'}),
             
             html.Div(id='ai-config-status', style={'marginTop': '10px'})
         ]),
@@ -599,6 +610,57 @@ def toggle_ai_modal(n1, n2, is_open):
     if n1 or n2:
         return not is_open
     return is_open
+
+# Dynamic Model Selector
+@app.callback(
+    Output('model-selector-container', 'children'),
+    Input('ai-provider-select', 'value')
+)
+def update_model_selector(provider):
+    if not provider:
+        return html.P("Select a provider first", style={'color': COLORS['text_dim'], 'fontSize': '12px'})
+    
+    model_options = {
+        'openai': [
+            {'label': 'GPT-4 Turbo (Recommandé)', 'value': 'gpt-4-turbo'},
+            {'label': 'GPT-4', 'value': 'gpt-4'},
+            {'label': 'GPT-3.5 Turbo (Rapide & économique)', 'value': 'gpt-3.5-turbo'}
+        ],
+        'anthropic': [
+            {'label': 'Claude 3.5 Sonnet (Recommandé)', 'value': 'claude-3-5-sonnet-20241022'},
+            {'label': 'Claude 3 Opus (Plus puissant)', 'value': 'claude-3-opus-20240229'},
+            {'label': 'Claude 3 Sonnet', 'value': 'claude-3-sonnet-20240229'},
+            {'label': 'Claude 3 Haiku (Rapide)', 'value': 'claude-3-haiku-20240307'}
+        ],
+        'mistral': [
+            {'label': 'Mistral Large Latest (Recommandé)', 'value': 'mistral-large-latest'},
+            {'label': 'Mistral Small Latest (Rapide)', 'value': 'mistral-small-latest'},
+            {'label': 'Mistral Medium Latest', 'value': 'mistral-medium-latest'},
+            {'label': 'Open Mixtral 8x7B', 'value': 'open-mixtral-8x7b'},
+            {'label': 'Open Mistral 7B (Ultra-rapide)', 'value': 'open-mistral-7b'},
+            {'label': 'Codestral (Code)', 'value': 'codestral-latest'}
+        ],
+        'gemini': [
+            {'label': 'Gemini Pro (Recommandé)', 'value': 'gemini-pro'},
+            {'label': 'Gemini Pro Vision', 'value': 'gemini-pro-vision'}
+        ]
+    }
+    
+    options = model_options.get(provider, [])
+    
+    return html.Div([
+        html.Label("Model:", style={'color': COLORS['text'], 'fontWeight': '500', 'marginBottom': '5px'}),
+        dbc.Select(
+            id='ai-model-input',
+            options=options,
+            value=options[0]['value'] if options else None,
+            style={'marginBottom': '10px'}
+        ),
+        html.P([
+            html.Small(f"💡 Le premier modèle est recommandé pour la plupart des usages", 
+                      style={'color': COLORS['text_dim'], 'fontSize': '11px'})
+        ])
+    ])
 
 # AI Connection
 @app.callback(
