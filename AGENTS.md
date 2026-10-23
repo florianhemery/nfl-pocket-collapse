@@ -7,7 +7,7 @@
 ## Commandes
 - Install : `uv sync --frozen` (Python 3.12, `uv` seul, jamais `pip install`).
 - Tout verifier : `uv run ruff check && uv run ruff format --check && uv run pyright && uv run pytest`
-- Export du site : `uv run dss export` (ecrit `exports/site-data.json`).
+- Export du site : `uv run dss export` (ecrit `exports/site-data.json`). Sans les fichiers Kaggle : `uv run dss export --results-only`.
 - Reconstruction complete : `bash scripts/fetch_data.sh` puis `uv run dss build` (donnees de suivi Kaggle requises, hors depot).
 
 ## Definition de "termine"

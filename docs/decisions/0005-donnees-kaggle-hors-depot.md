@@ -11,18 +11,19 @@ Quatre fichiers du NFL Big Data Bowl 2023 (`games`, `plays`, `players`, `pffScou
 ## Options etudiees
 ### Option A : retirer les CSV de l'arbre, les ignorer, fournir un script de telechargement et des sommes de controle
 - Pour : ne redistribue rien dont les conditions sont incertaines ; reproductible via la CLI Kaggle ; les sommes de controle detectent un fichier different.
-- Contre : le telechargement demande un compte Kaggle et l'acceptation des regles ; l'export ne tourne pas en CI sans les fichiers.
+- Contre : le telechargement demande un compte Kaggle et l'acceptation des regles ; l'export recoupe par plays.csv et games.csv ne tourne pas en CI sans les fichiers ; `dss export --results-only` tourne depuis le fichier de resultats versionne et sert de garde de derive.
 ### Option B : garder les CSV dans le depot
 - Pour : tout fonctionne apres un clone.
 - Contre : risque de redistribution contraire aux conditions.
 
 ## Decision
-Option A. `data/*.csv` et `data/tracking/` sont ignores (les fichiers restent sur le disque), `scripts/fetch_data.sh` telecharge la competition `nfl-big-data-bowl-2023` avec la CLI kaggle et renomme les fichiers de suivi en `data/tracking/tracking_week_N.csv`, `data/checksums.sha256` donne le sha256 des quatre fichiers de metadonnees. `output/dss_results.csv`, resultat derive, reste versionne et documente comme artefact precalcule.
+Option A. `data/*.csv` et `data/tracking/` sont ignores (les fichiers restent sur le disque), `scripts/fetch_data.sh` telecharge la competition `nfl-big-data-bowl-2023` avec la CLI kaggle et renomme les fichiers de suivi en `data/tracking/tracking_week_N.csv`, `data/checksums.sha256` donne le sha256 des quatre fichiers de metadonnees. `output/dss_results.csv` reste versionne comme artefact precalcule, mais reduit aux colonnes dont l'export a besoin : scores calcules, identifiants de match et de passe, saison et semaine, equipe defensive, etiquettes de couverture PFF et indicateur de completion. Les colonnes brutes de la competition qui ne servent pas (resultats de passe et de jeu, down, distance, equipe offensive, indicateur de sack) en sont retirees.
 
 ## Consequences
+- Ce qui reste suivi est quand meme un extrait au niveau des lignes de donnees de la competition (identifiants, equipe defensive, etiquettes PFF) : on ne peut donc pas ecrire que les donnees ne sont pas redistribuees. Les conditions de redistribution de cet extrait ne sont pas verifiees ; la note de licence de l'export le dit.
 - Etat des connaissances sur la licence : les editions recentes du Big Data Bowl sont indiquees sous CC BY-NC 4.0 par des depots tiers vus dans des resultats de recherche ; les conditions de l'edition 2023 n'ont pas pu etre lues (la page des regles de Kaggle n'a rien renvoye au telechargement du 2026-10-23, elle est rendue par JavaScript). On n'affirme rien de plus : voir `dataset_license_note` dans l'export.
 - Retirer les fichiers de l'arbre ne les retire pas de l'historique git. Reecrire l'historique est destructif et n'est pas decide ici.
-- Les sommes de controle des fichiers de suivi manquent : ils n'etaient pas disponibles en local. Le script n'a pas pu etre execute de bout en bout (pas de compte Kaggle dans cet environnement) ; la syntaxe a ete verifiee.
+- Les sommes de controle des fichiers de suivi manquent : ils n'etaient pas disponibles en local, et le script le signale a la fin. Le script verifie les quatre fichiers de metadonnees dans le repertoire temporaire avant de rien deplacer dans `data/`, et utilise `shasum` si `sha256sum` manque. Il n'a pas pu etre execute avec un vrai telechargement (pas de compte Kaggle dans cet environnement) ; la verification a ete testee avec une fausse commande `kaggle` et un fichier altere.
 - Verifier les regles de la page Kaggle avant toute reutilisation ou republication des donnees.
 
 ## Sources
