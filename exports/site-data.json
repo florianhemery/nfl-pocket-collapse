@@ -1,12 +1,12 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "provenance": {
-    "pipeline_commit": "0425e71",
-    "generated_at": "2026-10-23T21:14:52Z",
+    "pipeline_commit": "c8fbfa3",
+    "generated_at": "2026-10-23T21:59:47Z",
     "dataset": "NFL Big Data Bowl 2023 (2021 season, weeks 1-8)",
-    "dataset_license_note": "The terms of the 2023 competition were not verified by the producer of this file. Recent Big Data Bowl editions are published under CC BY-NC 4.0 according to secondary sources. The Kaggle files are not redistributed here: only derived statistics are.",
+    "dataset_license_note": "The terms of the 2023 competition were not verified by the producer of this file. Recent Big Data Bowl editions are published under CC BY-NC 4.0 according to secondary sources. The raw Kaggle files are not tracked in this repository, but a row-level extract is: output/dss_results.csv holds, for each analyzed play, the game and play ids, the defensive team, the PFF coverage labels, the completion flag and the computed scores. Whether redistributing that extract is permitted has not been verified.",
     "input_sha256": {
-      "dss_results.csv": "fc673d6d1763d995d50d0dd701d61701549c2b39270ec95d63f7f6fa7acf540d",
+      "dss_results.csv": "5b780cb796d9f5ac7b278974f27488a8f82fd8e08e876d76f559e1ddd7b97cd3",
       "games.csv": "1770c67529d1641683fff2666833fe15b03933c2d3242e2b5afb777c193c50c0",
       "plays.csv": "bfb36981ae2f187d50a0337dc6bce8beb01e1d08f2cded83e3eba3842c9a0237"
     },
@@ -23,7 +23,7 @@
         "mean": 65.0163,
         "sd": 15.2238,
         "r_completed": 0.005,
-        "p_completed": 0.6678
+        "p_completed": 0.667767
       },
       {
         "id": "sd",
@@ -31,7 +31,7 @@
         "mean": 71.0002,
         "sd": 2.9968,
         "r_completed": 0.0271,
-        "p_completed": 0.019
+        "p_completed": 0.019032
       },
       {
         "id": "od",
@@ -39,7 +39,7 @@
         "mean": 29.84,
         "sd": 14.3135,
         "r_completed": -0.0478,
-        "p_completed": 0.0
+        "p_completed": 3.4e-05
       }
     ]
   },
@@ -47,7 +47,7 @@
     "outcome": "completed",
     "pearson_dss_completed": {
       "r": -0.0185,
-      "p": 0.1098,
+      "p": 0.109833,
       "n": 7510
     },
     "quintiles": [
@@ -94,9 +94,49 @@
         "r_completed": -0.1891
       }
     ],
+    "stratified": {
+      "by": "coverage_type",
+      "strata": [
+        {
+          "stratum": "Zone",
+          "n": 4943,
+          "r": -0.0477,
+          "p": 0.000793,
+          "completion_high_dss": 0.635,
+          "completion_low_dss": 0.6719
+        },
+        {
+          "stratum": "Man",
+          "n": 2160,
+          "r": -0.0708,
+          "p": 0.000997,
+          "completion_high_dss": 0.5014,
+          "completion_low_dss": 0.5616
+        },
+        {
+          "stratum": "Other",
+          "n": 407,
+          "r": -0.0741,
+          "p": 0.135459,
+          "completion_high_dss": 0.4755,
+          "completion_low_dss": 0.5468
+        }
+      ],
+      "adjusted": {
+        "method": "partial correlation of DSS and completed controlling for frames_analyzed and coverage_type",
+        "controls": [
+          "frames_analyzed",
+          "coverage_type"
+        ],
+        "r": -0.004,
+        "p": 0.731144,
+        "n": 7510
+      },
+      "reading": "simpson"
+    },
     "model_comparison": null,
     "verdict": "no_signal",
-    "verdict_rule": "Outcome: pass completed (1) or not (0). Let r be the Pearson correlation between DSS and the outcome over all analyzed plays. The hypothesis is that a higher DSS means fewer completions, so only r < 0 counts. signal: p < 0.01 and |r| >= 0.1. weak_signal: p < 0.05, r < 0, and not signal. no_signal: anything else, including a significant positive r. This rule looks at the descriptive correlation only; the held-out model comparison (model_comparison) is reported separately when available."
+    "verdict_rule": "Outcome: pass completed (1) or not (0). Let r be the Pearson correlation between DSS and the outcome over all analyzed plays. The hypothesis is that a higher DSS means fewer completions, so only r < 0 counts. signal: p < 0.01 and |r| >= 0.1. weak_signal: p < 0.05, r < 0, and not signal. no_signal: anything else, including a significant positive r. This rule looks at the descriptive correlation only and does not account for confounding (see validation.stratified); the held-out model comparison (model_comparison) is reported separately when available."
   },
   "teams": [
     {
