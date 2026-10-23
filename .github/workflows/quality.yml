@@ -10,10 +10,12 @@ permissions:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.13.1"
@@ -32,7 +34,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Dependency audit
-        # pip-audit 2.10.1, published 2026-06-10, read on PyPI 2026-10-23. Run-time only.
+        # pip-audit 2.10.1 is a locked dev dependency, so its own dependency tree is pinned by
+        # uv.lock like everything else. The requirements file lists every locked package.
         run: |
           uv export --frozen --no-emit-project -o "$RUNNER_TEMP/requirements.txt"
-          uvx pip-audit==2.10.1 --requirement "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
+          uv run --frozen pip-audit --requirement "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
