@@ -32,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--results", type=Path, default=Path("output/dss_results.csv"))
     export.add_argument("--data-dir", type=Path, default=Path("data"))
     export.add_argument("--output", type=Path, default=Path("exports/site-data.json"))
+    export.add_argument(
+        "--results-only",
+        action="store_true",
+        help="compute from the results CSV alone, without data/plays.csv and data/games.csv",
+    )
     return parser
 
 
@@ -45,9 +50,12 @@ def run_build(args: argparse.Namespace) -> None:
 
 def run_export(args: argparse.Namespace) -> None:
     data_dir: Path = args.data_dir
-    inputs = ExportInputs(
-        results=args.results, plays=data_dir / "plays.csv", games=data_dir / "games.csv"
-    )
+    if args.results_only:
+        inputs = ExportInputs(results=args.results)
+    else:
+        inputs = ExportInputs(
+            results=args.results, plays=data_dir / "plays.csv", games=data_dir / "games.csv"
+        )
     data = build_site_data(inputs, commit=git_commit(REPO_ROOT))
     write_site_data(data, args.output)
     logger.info("wrote %s (%d plays)", args.output, data["provenance"]["plays_analyzed"])

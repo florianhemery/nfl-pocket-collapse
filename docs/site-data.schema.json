@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/florianhemery/nfl-pocket-collapse/blob/main/docs/site-data.schema.json",
-  "title": "NFL DSS site data (contract v1)",
-  "description": "Output of `dss export`. See docs/CONTRACT.md. Unknown fields are rejected on purpose: an addition bumps schema_version.",
+  "title": "NFL DSS site data (contract v1.1)",
+  "description": "Output of `dss export`. See docs/CONTRACT.md. Unknown fields are rejected on purpose: an addition bumps schema_version. validation.stratified is optional since v1.1.",
   "type": "object",
   "properties": {
     "schema_version": {
@@ -219,6 +219,110 @@
             ],
             "additionalProperties": false
           }
+        },
+        "stratified": {
+          "type": "object",
+          "properties": {
+            "by": {
+              "const": "coverage_type"
+            },
+            "strata": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "stratum": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "n": {
+                    "type": "integer",
+                    "minimum": 3
+                  },
+                  "r": {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1
+                  },
+                  "p": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "completion_high_dss": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "completion_low_dss": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "stratum",
+                  "n",
+                  "r",
+                  "p",
+                  "completion_high_dss",
+                  "completion_low_dss"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "adjusted": {
+              "type": "object",
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "controls": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1
+                },
+                "r": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "p": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "n": {
+                  "type": "integer",
+                  "minimum": 4
+                }
+              },
+              "required": [
+                "method",
+                "controls",
+                "r",
+                "p",
+                "n"
+              ],
+              "additionalProperties": false
+            },
+            "reading": {
+              "enum": [
+                "simpson",
+                "consistent"
+              ]
+            }
+          },
+          "required": [
+            "by",
+            "strata",
+            "adjusted",
+            "reading"
+          ],
+          "additionalProperties": false
         },
         "model_comparison": {
           "anyOf": [

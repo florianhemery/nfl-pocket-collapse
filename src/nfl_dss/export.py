@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -20,12 +21,19 @@ import pandas as pd
 from numpy.typing import NDArray
 from scipy import stats
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 DECIMALS = 4
+#: p-values keep six decimals, floored at this value so that a tiny p is never written as 0.
+P_DECIMALS = 6
+P_FLOOR = 1e-6
 BOOTSTRAP_RESAMPLES = 2000
 BOOTSTRAP_SEED = 20261023
 CI_LEVEL = 0.95
 QUINTILES = 5
+#: Controls of the adjusted estimate: time to throw and the coverage family.
+ADJUSTMENT_CONTROLS = ["frames_analyzed", "coverage_type"]
+#: A coverage family needs this many plays to be read on its own (see READING_RULE).
+READING_MIN_PLAYS = 500
 
 #: Verdict thresholds. They are fixed before looking at results and written in VERDICT_RULE.
 SIGNAL_ALPHA = 0.01
@@ -38,16 +46,32 @@ VERDICT_RULE = (
     f"completions, so only r < 0 counts. signal: p < {SIGNAL_ALPHA} and |r| >= "
     f"{SIGNAL_MIN_ABS_R}. weak_signal: p < {WEAK_SIGNAL_ALPHA}, r < 0, and not signal. "
     "no_signal: anything else, including a significant positive r. This rule looks at the "
-    "descriptive correlation only; the held-out model comparison (model_comparison) is "
+    "descriptive correlation only and does not account for confounding (see "
+    "validation.stratified); the held-out model comparison (model_comparison) is "
     "reported separately when available."
+)
+
+#: Written before looking at the stratified results; documented in docs/CONTRACT.md.
+READING_RULE = (
+    "A stratum is a coverage family (coverage_type) with at least "
+    f"{READING_MIN_PLAYS} plays; smaller ones are reported but do not enter the reading. "
+    "A correlation counts as an association when r < 0 and p < "
+    f"{WEAK_SIGNAL_ALPHA}. reading is simpson when all the strata that enter the reading "
+    "agree with each other on whether there is an association and the pooled correlation "
+    "says the opposite. It is consistent in every other case."
 )
 
 DATASET_NAME = "NFL Big Data Bowl 2023"
 DATASET_LICENSE_NOTE = (
     "The terms of the 2023 competition were not verified by the producer of this file. "
     "Recent Big Data Bowl editions are published under CC BY-NC 4.0 according to secondary "
-    "sources. The Kaggle files are not redistributed here: only derived statistics are."
+    "sources. The raw Kaggle files are not tracked in this repository, but a row-level "
+    "extract is: output/dss_results.csv holds, for each analyzed play, the game and play "
+    "ids, the defensive team, the PFF coverage labels, the completion flag and the computed "
+    "scores. Whether redistributing that extract is permitted has not been verified."
 )
+#: Path of the committed export, relative to the repository root.
+EXPORT_PATH = "exports/site-data.json"
 FORMULA = "DSS = 100 * (0.40*VA + 0.30*SD + 0.30*OD)"
 
 SUBSCORES = [
@@ -61,10 +85,11 @@ RESULT_COLUMNS = [
     "sd",
     "od",
     "frames_analyzed",
+    "season",
+    "week",
     "gameId",
     "playId",
     "defensiveTeam",
-    "passResult",
     "coverage",
     "coverageType",
     "completed",
@@ -80,11 +105,20 @@ class ExportError(RuntimeError):
 
 @dataclass(frozen=True)
 class ExportInputs:
-    """Paths of the three files the export is computed from."""
+    """Paths of the files the export is computed from.
+
+    ``plays`` and ``games`` come together or not at all. With both, the results are
+    cross-checked against the competition files. Without them (the results-only path, the one
+    CI can run) the export is computed from ``results`` alone.
+    """
 
     results: Path
-    plays: Path
-    games: Path
+    plays: Path | None = None
+    games: Path | None = None
+
+    def __post_init__(self) -> None:
+        if (self.plays is None) != (self.games is None):
+            raise ValueError("plays and games must be given together")
 
 
 def r4(value: float) -> float:
@@ -92,6 +126,13 @@ def r4(value: float) -> float:
     if not np.isfinite(value):
         raise ExportError(f"non-finite value in export: {value}")
     return round(float(value), DECIMALS)
+
+
+def p6(value: float) -> float:
+    """Round a p-value to six decimals, never to 0, refusing NaN."""
+    if not np.isfinite(value):
+        raise ExportError(f"non-finite p-value in export: {value}")
+    return max(round(float(value), P_DECIMALS), P_FLOOR)
 
 
 def sha256_file(path: Path) -> str:
@@ -102,49 +143,80 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _git(git: str, repo_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603
+        [git, "-C", str(repo_dir), *args], capture_output=True, text=True, check=False
+    )
+
+
 def git_commit(repo_dir: Path) -> str:
-    """Short sha of ``HEAD`` in ``repo_dir``, or ``unknown`` outside a git checkout."""
+    """Short sha of ``HEAD`` in ``repo_dir``, ``-dirty`` appended if the tree is modified.
+
+    ``unknown`` outside a git checkout. The export itself is left out of the dirty check, so
+    that regenerating it twice in a row gives the same answer.
+    """
     git = shutil.which("git")
     if git is None:
         return "unknown"
-    proc = subprocess.run(  # noqa: S603
-        [git, "-C", str(repo_dir), "rev-parse", "--short=7", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return proc.stdout.strip() if proc.returncode == 0 and proc.stdout.strip() else "unknown"
+    head = _git(git, repo_dir, "rev-parse", "--short=7", "HEAD")
+    sha = head.stdout.strip()
+    if head.returncode != 0 or not sha:
+        return "unknown"
+    status = _git(git, repo_dir, "status", "--porcelain", "--", ".", f":(exclude){EXPORT_PATH}")
+    return f"{sha}-dirty" if status.returncode != 0 or status.stdout.strip() else sha
 
 
-def load_results(inputs: ExportInputs) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Read and cross-check the results against plays.csv and games.csv.
-
-    Returns the results and the games they cover. Fails if a play is unknown to plays.csv or
-    if the outcome flag disagrees with ``passResult``.
-    """
-    for path in (inputs.results, inputs.plays, inputs.games):
-        if not path.is_file():
-            raise ExportError(f"missing input file: {path}")
-    results = pd.read_csv(inputs.results)
+def _read_results(path: Path) -> pd.DataFrame:
+    if not path.is_file():
+        raise ExportError(f"missing input file: {path}")
+    results = pd.read_csv(path)
     missing = [c for c in RESULT_COLUMNS if c not in results.columns]
     if missing:
-        raise ExportError(f"{inputs.results} is missing columns: {', '.join(missing)}")
+        raise ExportError(f"{path} is missing columns: {', '.join(missing)}")
     if results.duplicated(["gameId", "playId"]).any():
         raise ExportError("duplicate (gameId, playId) rows in results")
-    plays = pd.read_csv(inputs.plays, usecols=["gameId", "playId", "passResult", "defensiveTeam"])
+    return results
+
+
+def _check_against_plays(results: pd.DataFrame, plays_path: Path) -> None:
+    if not plays_path.is_file():
+        raise ExportError(f"missing input file: {plays_path}")
+    plays = pd.read_csv(plays_path, usecols=["gameId", "playId", "passResult", "defensiveTeam"])
     joined = results.merge(plays, on=["gameId", "playId"], how="left", suffixes=("", "_plays"))
-    if joined["passResult_plays"].isna().any():
+    if joined["passResult"].isna().any():
         raise ExportError("some results rows are absent from plays.csv")
-    expected = (joined["passResult_plays"] == "C").astype(int)
+    expected = (joined["passResult"] == "C").astype(int)
     if (expected != joined["completed"]).any() or (
         joined["defensiveTeam"] != joined["defensiveTeam_plays"]
     ).any():
         raise ExportError("results disagree with plays.csv (completed or defensiveTeam)")
-    games = pd.read_csv(inputs.games, usecols=["gameId", "season", "week"])
-    games = games.loc[games["gameId"].isin(results["gameId"])]
-    if games["gameId"].nunique() != results["gameId"].nunique():
+
+
+def _check_against_games(results: pd.DataFrame, games_path: Path) -> None:
+    if not games_path.is_file():
+        raise ExportError(f"missing input file: {games_path}")
+    games = pd.read_csv(games_path, usecols=["gameId", "season", "week"])
+    seen = results[["gameId", "season", "week"]].drop_duplicates()
+    joined = seen.merge(games, on="gameId", how="left", suffixes=("", "_games"))
+    if joined["season_games"].isna().any():
         raise ExportError("some results games are absent from games.csv")
-    return results, games
+    if (joined["season"] != joined["season_games"]).any() or (
+        joined["week"] != joined["week_games"]
+    ).any():
+        raise ExportError("results disagree with games.csv (season or week)")
+
+
+def load_results(inputs: ExportInputs) -> pd.DataFrame:
+    """Read the results and, when the competition files are given, cross-check them.
+
+    Fails if a play or game is unknown to ``plays.csv`` / ``games.csv`` or if the outcome flag,
+    the defensive team, the season or the week disagree with them.
+    """
+    results = _read_results(inputs.results)
+    if inputs.plays is not None and inputs.games is not None:
+        _check_against_plays(results, inputs.plays)
+        _check_against_games(results, inputs.games)
+    return results
 
 
 def pearson(a: FloatArray, b: FloatArray) -> tuple[float, float]:
@@ -173,7 +245,7 @@ def subscore_stats(results: pd.DataFrame) -> list[Json]:
                 "mean": r4(values.mean()),
                 "sd": r4(values.std(ddof=1)),
                 "r_completed": r4(r),
-                "p_completed": r4(p),
+                "p_completed": p6(p),
             }
         )
     return out
@@ -215,6 +287,107 @@ def verdict(r: float, p: float) -> str:
     if p < WEAK_SIGNAL_ALPHA and r < 0:
         return "weak_signal"
     return "no_signal"
+
+
+def partial_correlation(
+    y: FloatArray, x: FloatArray, controls: FloatArray
+) -> tuple[float, float, int]:
+    """Partial correlation of ``y`` and ``x`` given the columns of ``controls``.
+
+    Both variables are regressed on an intercept and the controls (least squares) and the
+    residuals are correlated. The p-value uses ``n - k - 2`` degrees of freedom with ``k`` the
+    number of control columns. Returns ``(r, p, n)``.
+    """
+    n = len(y)
+    design = np.column_stack([np.ones(n), controls])
+    dof = n - controls.shape[1] - 2
+    if dof < 1:
+        raise ExportError("not enough plays for the adjusted estimate")
+    residuals: list[FloatArray] = []
+    for column in (y, x):
+        beta, *_ = np.linalg.lstsq(design, column, rcond=None)
+        residuals.append(column - design @ beta)
+    if np.std(residuals[0]) < 1e-12 or np.std(residuals[1]) < 1e-12:
+        raise ExportError("partial correlation undefined: a variable is explained by the controls")
+    r = float(np.corrcoef(residuals[0], residuals[1])[0, 1])
+    t = abs(r) * math.sqrt(dof / (1.0 - r * r))
+    return r, float(2.0 * stats.t.sf(t, dof)), n
+
+
+def _median_split_rates(dss: FloatArray, completed: FloatArray) -> tuple[float, float]:
+    """Completion rate of the plays with DSS at or above the median, then below it."""
+    high = dss >= np.median(dss)
+    if high.all() or not high.any():
+        raise ExportError("median split undefined: constant DSS")
+    return float(completed[high].mean()), float(completed[~high].mean())
+
+
+def stratum_table(results: pd.DataFrame) -> list[Json]:
+    """DSS/completion correlation and median split inside each coverage family, largest first.
+
+    A family with fewer than 3 plays or with a constant outcome has no correlation and is left
+    out.
+    """
+    kind = np.array([str(v) for v in results["coverageType"]])
+    dss, completed = _col(results, "dss"), _col(results, "completed")
+    out: list[Json] = []
+    for name in sorted(set(kind.tolist())):
+        pick = kind == name
+        if pick.sum() < 3 or np.std(completed[pick]) == 0:
+            continue
+        r, p = pearson(dss[pick], completed[pick])
+        high, low = _median_split_rates(dss[pick], completed[pick])
+        out.append(
+            {
+                "stratum": name,
+                "n": int(pick.sum()),
+                "r": r4(r),
+                "p": p6(p),
+                "completion_high_dss": r4(high),
+                "completion_low_dss": r4(low),
+            }
+        )
+    return sorted(out, key=lambda row: (-row["n"], row["stratum"]))
+
+
+def adjusted_estimate(results: pd.DataFrame) -> Json:
+    """Partial correlation of DSS and completion given time to throw and coverage family."""
+    kind = pd.Series([str(v) for v in results["coverageType"]])
+    dummies = pd.get_dummies(kind, drop_first=True, dtype=np.float64)
+    controls = np.column_stack([_col(results, "frames_analyzed"), dummies.to_numpy()])
+    r, p, n = partial_correlation(_col(results, "dss"), _col(results, "completed"), controls)
+    return {
+        "method": (
+            "partial correlation of DSS and completed controlling for "
+            + " and ".join(ADJUSTMENT_CONTROLS)
+        ),
+        "controls": list(ADJUSTMENT_CONTROLS),
+        "r": r4(r),
+        "p": p6(p),
+        "n": n,
+    }
+
+
+def reading(pooled_r: float, pooled_p: float, strata: list[Json]) -> str:
+    """Apply READING_RULE: ``simpson`` when the strata and the pooled correlation disagree."""
+    pooled = pooled_p < WEAK_SIGNAL_ALPHA and pooled_r < 0
+    within = {
+        row["p"] < WEAK_SIGNAL_ALPHA and row["r"] < 0
+        for row in strata
+        if row["n"] >= READING_MIN_PLAYS
+    }
+    return "simpson" if len(within) == 1 and within != {pooled} else "consistent"
+
+
+def stratified_validation(results: pd.DataFrame, pooled_r: float, pooled_p: float) -> Json:
+    """Within-coverage and adjusted estimates, to read next to the pooled correlation."""
+    strata = stratum_table(results)
+    return {
+        "by": "coverage_type",
+        "strata": strata,
+        "adjusted": adjusted_estimate(results),
+        "reading": reading(pooled_r, pooled_p, strata),
+    }
 
 
 def bootstrap_ci(values: FloatArray, rng: np.random.Generator) -> tuple[float, float]:
@@ -289,13 +462,19 @@ def coverage_table(results: pd.DataFrame) -> list[Json]:
     return sorted(out, key=lambda row: (-row["n"], row["coverage"]))
 
 
-def dataset_label(games: pd.DataFrame) -> str:
-    seasons = sorted(games["season"].unique())
+def dataset_label(results: pd.DataFrame) -> str:
+    seasons = sorted(int(v) for v in results["season"].unique())
     if len(seasons) != 1:
         raise ExportError(f"expected one season, got {seasons}")
-    return (
-        f"{DATASET_NAME} ({seasons[0]} season, weeks {games['week'].min()}-{games['week'].max()})"
-    )
+    first, last = int(results["week"].min()), int(results["week"].max())
+    return f"{DATASET_NAME} ({seasons[0]} season, weeks {first}-{last})"
+
+
+def _input_hashes(inputs: ExportInputs) -> dict[str, str]:
+    paths = {"dss_results.csv": inputs.results}
+    if inputs.plays is not None and inputs.games is not None:
+        paths.update({"games.csv": inputs.games, "plays.csv": inputs.plays})
+    return {name: sha256_file(path) for name, path in sorted(paths.items())}
 
 
 def build_site_data(
@@ -305,7 +484,7 @@ def build_site_data(
     generated_at: datetime | None = None,
 ) -> Json:
     """Compute the whole export. ``generated_at`` is injectable for deterministic tests."""
-    results, games = load_results(inputs)
+    results = load_results(inputs)
     stamp = (generated_at or datetime.now(UTC)).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     r, p = pearson(_col(results, "dss"), _col(results, "completed"))
     return {
@@ -313,13 +492,9 @@ def build_site_data(
         "provenance": {
             "pipeline_commit": commit,
             "generated_at": stamp,
-            "dataset": dataset_label(games),
+            "dataset": dataset_label(results),
             "dataset_license_note": DATASET_LICENSE_NOTE,
-            "input_sha256": {
-                "dss_results.csv": sha256_file(inputs.results),
-                "games.csv": sha256_file(inputs.games),
-                "plays.csv": sha256_file(inputs.plays),
-            },
+            "input_sha256": _input_hashes(inputs),
             "plays_analyzed": len(results),
             "games": int(results["gameId"].nunique()),
             "teams": int(results["defensiveTeam"].nunique()),
@@ -327,9 +502,10 @@ def build_site_data(
         "metric": {"formula": FORMULA, "subscores": subscore_stats(results)},
         "validation": {
             "outcome": "completed",
-            "pearson_dss_completed": {"r": r4(r), "p": r4(p), "n": len(results)},
+            "pearson_dss_completed": {"r": r4(r), "p": p6(p), "n": len(results)},
             "quintiles": quintile_table(results),
             "confounders": confounder_table(results),
+            "stratified": stratified_validation(results, r, p),
             "model_comparison": None,
             "verdict": verdict(r, p),
             "verdict_rule": VERDICT_RULE,
