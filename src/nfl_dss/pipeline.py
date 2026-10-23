@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from nfl_dss.ingest import iter_tracking, load_metadata
+from nfl_dss.ingest import InputError, iter_tracking, load_metadata
 from nfl_dss.metrics import DEFAULT_WEIGHTS, FloatArray, FrameBatch, combine, frame_scores
 from nfl_dss.secondary import PLAY_KEY, identify_secondary
 
@@ -39,7 +39,15 @@ RESULT_COLUMNS = [
     "coverage",
     "coverageType",
     "completed",
+    "down",
+    "yardsToGo",
+    "yardsToEndzone",
+    "playResult",
 ]
+#: Play context kept in the results for the held-out validation (ADR 0006).
+CONTEXT_COLUMNS = ["down", "yardsToGo", "yardsToEndzone", "playResult"]
+MIDFIELD = 50
+FIELD_LENGTH = 100
 
 
 def _event_frames(secondary: pd.DataFrame, event: str, name: str) -> pd.Series:
@@ -152,19 +160,43 @@ def score_plays(
     return aggregate_plays(frame_table(rows), num_dbs, weights, decimals)
 
 
+def yards_to_endzone(plays: pd.DataFrame) -> pd.Series:
+    """Yards from the ball to the opponent end zone, from the side of the field and the line.
+
+    ``yardlineSide`` is the team whose half the ball is in. In the offense's own half the
+    distance is ``100 - yardlineNumber``; in the opponent's half it is ``yardlineNumber``; at
+    midfield (no side, line 50) it is 50. Any other missing side is refused.
+    """
+    side, number = plays["yardlineSide"], plays["yardlineNumber"]
+    midfield = side.isna() & (number == MIDFIELD)
+    if (side.isna() & ~midfield).any():
+        raise InputError("plays.csv has a missing yardlineSide away from midfield")
+    own_half = side == plays["possessionTeam"]
+    distance = number.where(~own_half, FIELD_LENGTH - number)
+    return distance.where(~midfield, MIDFIELD).astype("int64").rename("yardsToEndzone")
+
+
+def play_context(plays: pd.DataFrame) -> pd.DataFrame:
+    """Down, distance, yards to the end zone and yards gained, one row per play."""
+    context = plays.assign(yardsToEndzone=yards_to_endzone(plays))
+    return context[[*PLAY_KEY, *CONTEXT_COLUMNS]]
+
+
 def attach_play_metadata(
     scores: pd.DataFrame, plays: pd.DataFrame, games: pd.DataFrame
 ) -> pd.DataFrame:
-    """Add season, week, team, coverage and the completion flag, in ``RESULT_COLUMNS`` order.
+    """Add season, week, team, coverage, completion flag and play context.
 
-    Only what the export needs is kept: raw competition columns such as the pass result, the
-    yardage, the down or the offensive team are read to derive ``completed`` but never written.
+    Columns come in ``RESULT_COLUMNS`` order. Only what the export needs is kept: the pass
+    result and the offensive team are read to derive ``completed`` and ``yardsToEndzone`` but
+    never written. The context columns are listed in ADR 0006.
     """
     meta = plays.rename(
         columns={"pff_passCoverage": "coverage", "pff_passCoverageType": "coverageType"}
     )
     cols = [*PLAY_KEY, "defensiveTeam", "passResult", "coverage", "coverageType"]
     merged = scores.merge(meta[cols], on=PLAY_KEY, how="inner")
+    merged = merged.merge(play_context(plays), on=PLAY_KEY, how="inner")
     merged = merged.merge(games[["gameId", "season", "week"]], on="gameId", how="inner")
     merged["completed"] = (merged["passResult"] == "C").astype("int64")
     return merged[RESULT_COLUMNS].sort_values(PLAY_KEY).reset_index(drop=True)
@@ -183,6 +215,21 @@ def build_results(data_dir: Path, tracking_dir: Path) -> pd.DataFrame:
     results = attach_play_metadata(scores, meta.plays, meta.games)
     logger.info("scored %d plays", len(results))
     return results
+
+
+def enrich_results(results: pd.DataFrame, plays: pd.DataFrame) -> pd.DataFrame:
+    """Add the play context columns to an existing results table, without tracking data.
+
+    Every row must find its play in ``plays``. Other columns are left untouched and the
+    result follows ``RESULT_COLUMNS``.
+    """
+    base = results.drop(columns=[c for c in CONTEXT_COLUMNS if c in results.columns])
+    merged = base.merge(play_context(plays), on=PLAY_KEY, how="left")
+    if merged[CONTEXT_COLUMNS].isna().any().any():
+        raise InputError("some results rows are absent from plays.csv")
+    for column in CONTEXT_COLUMNS:
+        merged[column] = merged[column].astype("int64")
+    return merged[RESULT_COLUMNS]
 
 
 def write_results(results: pd.DataFrame, path: Path) -> None:

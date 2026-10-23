@@ -1,4 +1,4 @@
-# NFL DSS -> florianhemery.fr data contract (v1.1)
+# NFL DSS -> florianhemery.fr data contract (v1.2)
 
 Producer: repo florianhemery/nfl-pocket-collapse, command `uv run dss export`.
 Consumer: portfolio-rag `apps/site`, committed snapshot at
@@ -13,7 +13,7 @@ Rules
 
 ```jsonc
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "provenance": {
     "pipeline_commit": "abc1234",          // git sha of the producer
     "generated_at": "2026-10-24T10:00:00Z",
@@ -37,10 +37,7 @@ Rules
     "quintiles": [ { "q": 1, "dss_min": 27.0, "dss_max": 50.1, "completion_rate": 0.623, "n": 1503 } ],
     "confounders": [ { "id": "frames_analyzed", "label": "Time to throw (frames)", "r_completed": -0.1891 } ],
     "stratified": { ... },                 // optional since v1.1, see below
-    "model_comparison": null,              // filled by phase 2:
-    // { "split": "train weeks 1-6 / test weeks 7-8", "baseline_features": [...],
-    //   "baseline_auc": 0.0, "with_dss_auc": 0.0, "delta_auc": 0.0, "delta_auc_ci95": [lo, hi],
-    //   "baseline_brier": 0.0, "with_dss_brier": 0.0 }
+    "model_comparison": null,              // filled since v1.2, see "v1.2 additions" below
     "verdict": "no_signal" | "weak_signal" | "signal",   // derived by a written rule in code
     "verdict_rule": "string"               // the rule, human readable
   },
@@ -86,6 +83,36 @@ Producer text fields (`verdict_rule`, `dataset_license_note`, labels) are Englis
 `measures.json` (optional companion, same folder): `[{ "id", "label", "value", "unit", "source": "site-data.json#/path" }]`
 used only for the "VERIFIE" badge numbers.
 
+## v1.2 additions (2026-10-24)
+
+`schema_version` becomes "1.2". `validation.model_comparison` is filled by `dss export` (protocol:
+`docs/decisions/0006-validation-hors-echantillon-protocole.md`). It stays nullable for consumers
+that meet an older file. All fields below are required when the object is present:
+
+```jsonc
+"model_comparison": {
+  "split": "train weeks 1-6 / test weeks 7-8",
+  "baseline_features": ["frames_analyzed", "coverageType", "coverage", "down", "yardsToGo", "yardsToEndzone"],
+  "n_train": 0, "n_test": 0, "n_test_games": 0,
+  "baseline_auc": 0.0, "with_dss_auc": 0.0,
+  "delta_auc": 0.0, "delta_auc_ci95": [lo, hi],        // with_dss minus baseline; the confirmatory test
+  "baseline_brier": 0.0, "with_dss_brier": 0.0,
+  "delta_brier": 0.0, "delta_brier_ci95": [lo, hi],    // with_dss minus baseline; negative is better
+  "baseline_logloss": 0.0, "with_dss_logloss": 0.0,
+  "subscores_auc": 0.0,                                // baseline plus VA, SD, OD (exploratory)
+  "delta_subscores_auc": 0.0,                          // subscores_auc minus baseline_auc
+  "yards": { "baseline_rmse": 0.0, "with_dss_rmse": 0.0, "delta_r2": 0.0 },   // exploratory
+  "bootstrap": { "unit": "game", "resamples": 2000, "seed": 20261024 },
+  "decision_rule": "string",                           // the rule, human readable
+  "decision": "no_signal" | "weak_signal" | "signal"   // derived by the written rule in code
+}
+```
+
+`decision` is not `validation.verdict`. The verdict reads the pooled correlation over all
+plays; the decision reads the held-out comparison and is the one the project reports as its
+conclusion. The two are never merged. Producer text (`decision_rule`, `split`) is English; the
+French site maps `decision` to its own copy.
+
 ## Producer notes (this repository)
 
 How `dss export` fills the fields, so that the numbers can be reproduced. All of it is in
@@ -117,3 +144,35 @@ How `dss export` fills the fields, so that the numbers can be reproduced. All of
   working tree has uncommitted changes (the export file itself is ignored for that test).
 - `dataset_license_note` says which data are tracked: the raw competition files are not, a
   row-level extract (`output/dss_results.csv`) is, and the redistribution terms are unverified.
+
+### Held-out comparison (`validation.model_comparison`)
+
+All of it is in `src/nfl_dss/validation.py`, and every choice below was written before any
+model was fitted (ADR 0006).
+
+- Split: plays of weeks 1 to 6 train, plays of weeks 7 and 8 test, by the `week` column. Models
+  are fitted once; the test set is only used to predict.
+- Baseline inputs: `frames_analyzed`, `yardsToGo` and `yardsToEndzone` (standardized with the
+  training mean and standard deviation), and one indicator per training level of
+  `coverageType`, `coverage` and `down`. A level unseen in training is all zeros in the test.
+  `yardsToEndzone` is `100 - yardlineNumber` when `yardlineSide` is the possession team,
+  `yardlineNumber` when it is the other team, and 50 at midfield.
+- Models: scikit-learn `LogisticRegression` (L2, `C = 1.0`, `lbfgs`, `max_iter = 1000`, nothing
+  tuned) for `completed`; `LinearRegression` for `playResult`. The logistic fit is refused if
+  it does not converge.
+- `delta_auc` and `delta_brier` are computed from unrounded values, then rounded, so they can
+  differ by 0.0001 from the difference of the two rounded values next to them.
+- Bootstrap: test games are drawn with replacement, all the plays of a drawn game are kept, and
+  both models are scored on the same resample. The models are not refitted, so the interval
+  covers the choice of test games and not the training sample. Resamples with a single outcome
+  class are skipped; `bootstrap.resamples` is the number kept. The interval is the 2.5 and 97.5
+  percentiles.
+- Decision, applied to the rounded values in the file: `signal` if the lower bound of
+  `delta_auc_ci95` is above 0; `weak_signal` if not and `delta_auc` is above 0.005;
+  `no_signal` otherwise. This is the only confirmatory test; Brier, log loss, the sub-score
+  model and the yards model are exploratory.
+- `subscores_auc` uses VA, SD and OD instead of DSS (not both: DSS is a linear combination of
+  them). `yards.delta_r2` is the test R2 with DSS minus the test R2 without.
+- `output/dss_results.csv` carries the play context the comparison needs: `down`, `yardsToGo`,
+  `yardsToEndzone`, `playResult`. With the competition files present, `dss export` checks
+  them against `plays.csv`.

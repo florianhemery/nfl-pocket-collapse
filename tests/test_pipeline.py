@@ -8,13 +8,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from nfl_dss.ingest import InputError, load_metadata
 from nfl_dss.pipeline import (
+    CONTEXT_COLUMNS,
     FALLBACK_SUBSCORE,
     RESULT_COLUMNS,
     aggregate_plays,
     build_results,
+    enrich_results,
     score_plays,
     write_results,
+    yards_to_endzone,
 )
 from nfl_dss.secondary import PLAY_KEY
 from tests.synth import random_secondary
@@ -67,3 +71,46 @@ def test_undefined_spacing_and_orientation_fall_back_to_the_neutral_score() -> N
     assert row["od"] == 50.0
     assert row["dss"] == pytest.approx(100 * (0.40 * 0.6 + 0.30 * 0.5 + 0.30 * 0.5))
     assert row["frames_analyzed"] == 4
+
+
+def plays_frame(rows: list[tuple[str, str | None, int]]) -> pd.DataFrame:
+    """Plays with a possession team, the side of the field and the line number."""
+    return pd.DataFrame(
+        {
+            "gameId": 1,
+            "playId": range(len(rows)),
+            "possessionTeam": [r[0] for r in rows],
+            "yardlineSide": [r[1] for r in rows],
+            "yardlineNumber": [r[2] for r in rows],
+            "down": 1,
+            "yardsToGo": 10,
+            "playResult": 3,
+        }
+    )
+
+
+def test_yards_to_endzone_from_the_side_of_the_field() -> None:
+    plays = plays_frame([("TB", "TB", 33), ("TB", "DAL", 33), ("TB", None, 50), ("TB", "TB", 1)])
+    assert yards_to_endzone(plays).tolist() == [67, 33, 50, 99]
+
+
+def test_yards_to_endzone_refuses_a_missing_side_away_from_midfield() -> None:
+    with pytest.raises(InputError, match="yardlineSide"):
+        yards_to_endzone(plays_frame([("TB", None, 30)]))
+
+
+def test_enrich_adds_the_context_and_keeps_the_rest(tiny_data: Path) -> None:
+    results = build_results(tiny_data, tiny_data / "tracking")
+    plays = load_metadata(tiny_data).plays
+    bare = results.drop(columns=CONTEXT_COLUMNS)
+    enriched = enrich_results(bare, plays)
+    pd.testing.assert_frame_equal(enriched, results)
+    # Running it again changes nothing.
+    pd.testing.assert_frame_equal(enrich_results(enriched, plays), results)
+
+
+def test_enrich_refuses_a_play_unknown_to_plays_csv(tiny_data: Path) -> None:
+    results = build_results(tiny_data, tiny_data / "tracking")
+    plays = load_metadata(tiny_data).plays.iloc[1:]
+    with pytest.raises(InputError, match=r"absent from plays\.csv"):
+        enrich_results(results.drop(columns=CONTEXT_COLUMNS), plays)

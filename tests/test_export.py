@@ -37,6 +37,12 @@ def make_inputs(
     play_id = np.arange(n_plays)
     cov = rng.integers(0, len(COVERAGES), n_plays)
     result = rng.choice(["C", "I", "IN", "S"], n_plays, p=[0.6, 0.3, 0.05, 0.05])
+    possession = rng.choice(teams, n_plays)
+    side = np.where(rng.random(n_plays) < 0.5, possession, "OPP")
+    number = rng.integers(1, 51, n_plays)
+    midfield = number == 50
+    side = np.where(midfield, "", side)
+    to_goal = np.where(midfield, 50, np.where(side == possession, 100 - number, number))
     columns: dict[str, Any] = {
         "dss": rng.normal(56, 8, n_plays).round(2).clip(20, 90),
         "va": rng.uniform(5, 99, n_plays).round(2),
@@ -52,9 +58,15 @@ def make_inputs(
         "coverage": [COVERAGES[i][0] for i in cov],
         "coverageType": [COVERAGES[i][1] for i in cov],
         "completed": (result == "C").astype(int),
+        "down": rng.integers(1, 5, n_plays),
+        "yardsToGo": rng.integers(1, 20, n_plays),
+        "yardsToEndzone": to_goal,
+        "playResult": rng.integers(-5, 30, n_plays),
     }
     results = pd.DataFrame(columns)
-    plays = results[["gameId", "playId", "defensiveTeam"]].assign(passResult=result)
+    plays = results[
+        ["gameId", "playId", "defensiveTeam", "down", "yardsToGo", "playResult"]
+    ].assign(passResult=result, possessionTeam=possession, yardlineSide=side, yardlineNumber=number)
     games = results[["gameId", "season", "week"]].drop_duplicates()
     paths = ExportInputs(tmp_path / "r.csv", tmp_path / "plays.csv", tmp_path / "games.csv")
     results.to_csv(paths.results, index=False)
@@ -130,7 +142,7 @@ def test_statistics_match_independent_computation(tmp_path: Path) -> None:
     prov = data["provenance"]
     assert (prov["plays_analyzed"], prov["teams"]) == (1200, 8)
     assert prov["dataset"] == "NFL Big Data Bowl 2023 (2021 season, weeks 1-8)"
-    assert data["validation"]["model_comparison"] is None
+    assert data["validation"]["model_comparison"]["split"] == "train weeks 1-6 / test weeks 7-8"
     assert data["replays"] == []
 
 
@@ -470,3 +482,38 @@ def test_git_commit_marks_a_modified_tree(tmp_path: Path) -> None:
     (tmp_path / "exports").mkdir()
     (tmp_path / "exports" / "site-data.json").write_text("{}\n", encoding="utf-8")
     assert export.git_commit(tmp_path) == clean
+
+
+def test_context_that_disagrees_with_plays_csv_is_refused(tmp_path: Path) -> None:
+    for column in ("down", "yardsToGo", "yardsToEndzone", "playResult"):
+        inputs = make_inputs(tmp_path)
+        df = pd.read_csv(inputs.results)
+        df[column] = df[column].where(df.index != 0, df[column] + 1)
+        df.to_csv(inputs.results, index=False)
+        with pytest.raises(ExportError, match=r"disagree with plays\.csv \(down"):
+            build(inputs)
+
+
+def test_plays_csv_without_the_context_columns_is_refused(tmp_path: Path) -> None:
+    inputs = make_inputs(tmp_path)
+    pd.read_csv(path_of(inputs.plays)).drop(columns=["yardlineSide"]).to_csv(
+        path_of(inputs.plays), index=False
+    )
+    with pytest.raises(ExportError, match="missing columns: yardlineSide"):
+        build(inputs)
+
+
+def test_model_comparison_is_in_the_export_and_leaves_the_verdict_alone(tmp_path: Path) -> None:
+    data = build(make_inputs(tmp_path))
+    comparison = data["validation"]["model_comparison"]
+    assert comparison["decision"] in {"no_signal", "weak_signal", "signal"}
+    assert comparison["n_train"] + comparison["n_test"] == data["provenance"]["plays_analyzed"]
+    assert data["schema_version"] == "1.2"
+    assert data["validation"]["verdict"] in {"no_signal", "weak_signal", "signal"}
+
+
+def test_results_only_gives_the_same_comparison(tmp_path: Path) -> None:
+    inputs = make_inputs(tmp_path)
+    full = build(inputs)["validation"]["model_comparison"]
+    light = build(ExportInputs(inputs.results))["validation"]["model_comparison"]
+    assert full == light
