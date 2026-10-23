@@ -122,9 +122,12 @@ def test_opposite_velocities_give_trivial_alignment() -> None:
 
 
 def test_negative_cosine_is_clamped_to_zero() -> None:
-    players = [(0.0, 0.0, 6.0, 0.0, 0.0), (3.0, 0.0, 1.0, 0.0, 0.0), (6.0, 0.0, 3.0, 180.0, 0.0)]
-    va, _, _ = scores(players)
-    assert 0.0 <= va <= 1.0
+    # Velocities (1, 0), (1, 0), (-10, 0): the mean velocity is (-8/3, 0), so the players'
+    # cosines to it are -1, -1 and +1 and their mean is -1/3. VA must be clamped to 0.
+    players = [(0.0, 0.0, 1.0, 0.0, 0.0), (3.0, 0.0, 1.0, 0.0, 0.0), (6.0, 0.0, 10.0, 180.0, 0.0)]
+    x, _, s, d, _ = columns(players)
+    mask = np.ones_like(x, dtype=np.bool_)
+    assert metrics.velocity_alignment(s, d, mask)[0] == 0.0
 
 
 def test_fewer_than_two_players_is_nan() -> None:
