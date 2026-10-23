@@ -1,0 +1,30 @@
+# 0005. Donnees Kaggle hors depot
+
+- Statut : accepte
+- Date : 2026-10-23
+- Verifie le : 2026-10-23
+- A revalider le : 2027-04-23
+
+## Contexte et probleme
+Quatre fichiers du NFL Big Data Bowl 2023 (`games`, `plays`, `players`, `pffScoutingData`, environ 15 Mo) etaient commites. Les fichiers de suivi, bien plus gros, etaient deja ignores. Il faut savoir si redistribuer ces fichiers est permis.
+
+## Options etudiees
+### Option A : retirer les CSV de l'arbre, les ignorer, fournir un script de telechargement et des sommes de controle
+- Pour : ne redistribue rien dont les conditions sont incertaines ; reproductible via la CLI Kaggle ; les sommes de controle detectent un fichier different.
+- Contre : le telechargement demande un compte Kaggle et l'acceptation des regles ; l'export ne tourne pas en CI sans les fichiers.
+### Option B : garder les CSV dans le depot
+- Pour : tout fonctionne apres un clone.
+- Contre : risque de redistribution contraire aux conditions.
+
+## Decision
+Option A. `data/*.csv` et `data/tracking/` sont ignores (les fichiers restent sur le disque), `scripts/fetch_data.sh` telecharge la competition `nfl-big-data-bowl-2023` avec la CLI kaggle et renomme les fichiers de suivi en `data/tracking/tracking_week_N.csv`, `data/checksums.sha256` donne le sha256 des quatre fichiers de metadonnees. `output/dss_results.csv`, resultat derive, reste versionne et documente comme artefact precalcule.
+
+## Consequences
+- Etat des connaissances sur la licence : les editions recentes du Big Data Bowl sont indiquees sous CC BY-NC 4.0 par des depots tiers vus dans des resultats de recherche ; les conditions de l'edition 2023 n'ont pas pu etre lues (la page des regles de Kaggle n'a rien renvoye au telechargement du 2026-10-23, elle est rendue par JavaScript). On n'affirme rien de plus : voir `dataset_license_note` dans l'export.
+- Retirer les fichiers de l'arbre ne les retire pas de l'historique git. Reecrire l'historique est destructif et n'est pas decide ici.
+- Les sommes de controle des fichiers de suivi manquent : ils n'etaient pas disponibles en local. Le script n'a pas pu etre execute de bout en bout (pas de compte Kaggle dans cet environnement) ; la syntaxe a ete verifiee.
+- Verifier les regles de la page Kaggle avant toute reutilisation ou republication des donnees.
+
+## Sources
+1. [NFL Big Data Bowl 2023, regles](https://www.kaggle.com/competitions/nfl-big-data-bowl-2023/rules) - officiel - tentative de lecture le 2026-10-23, contenu non obtenu : a verifier
+2. [tzeng7/bdb27](https://github.com/tzeng7/bdb27) et [harsha-suribhatla/combine-translation](https://github.com/harsha-suribhatla/combine-translation) - depots tiers, extraits vus dans des resultats de recherche, pages non rouvertes : a verifier - edition 2027, CC BY-NC 4.0

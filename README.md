@@ -1,266 +1,99 @@
-# NFL Defensive Sync Score (DSS) Analytics Platform
+# Defensive Sync Score (DSS)
 
-> **Next-Generation AI-Powered Analytics for NFL Defense Strategy**
+A tracking-data metric for NFL secondaries, built from the NFL Big Data Bowl 2023 files
+(2021 season, weeks 1 to 8). The question: does a secondary that moves as a coordinated unit
+allow fewer completions?
 
-A professional analytics platform analyzing 7,510 NFL plays from the 2021 season, featuring real-time AI insights and interactive visualizations. Designed for coaches, scouts, and analysts who demand clarity over chaos.
+The short answer from the data in this repository is that the metric, as defined, shows no
+detectable linear association with pass completion. Details and limits are below. Every number
+on this page is read from [`exports/site-data.json`](exports/site-data.json), which
+`uv run dss export` regenerates from the precomputed results.
 
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
-[![Plotly Dash](https://img.shields.io/badge/Plotly-Dash-00D9FF.svg)](https://plotly.com/dash/)
-[![AI Powered](https://img.shields.io/badge/AI-Powered-FF6B35.svg)](https://www.anthropic.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+## The metric
 
----
+For every pass play, frames from the snap to the pass release are scored on the defensive backs
+who are in coverage (PFF role `Coverage`, official position CB, FS, SS or DB, on the defensive
+team). Three sub-scores in [0, 1] are averaged over the frames:
 
-## Features
+| Sub-score | Definition |
+|---|---|
+| VA, velocity alignment | mean cosine similarity between each moving player's velocity and the group mean velocity, clamped to [0, 1] |
+| SD, spacing discipline | `1 / (1 + cv)`, with `cv` the coefficient of variation of the pairwise distances |
+| OD, orientation divergence | `1 - R`, with `R` the resultant length of the body orientations |
 
-### **Professional Analytics Dashboard**
-- **Real-time Team Rankings** - Compare all 32 NFL teams by DSS
-- **Performance Correlation** - Analyze DSS vs completion rates
-- **Coverage Analysis** - Deep dive into 12+ coverage types
-- **Interactive Heatmaps** - Team × Coverage performance matrix
-- **Sub-Score Radar** - Multi-dimensional defensive profiles
+`DSS = 100 * (0.40*VA + 0.30*SD + 0.30*OD)`. The weights are fixed by hand, not fitted.
+A play needs at least 3 backs on at least 3 frames.
 
-### **AI-Powered Insights**
-- **Bring Your Own AI** - Support for OpenAI, Anthropic Claude, Mistral AI, Google Gemini
-- **Natural Language Queries** - Ask questions in plain English/French
-- **Built-In Analytics Engine** - Works without external APIs
-- **Smart Fallback** - Automatic switch to built-in mode on API errors
+## Results (7510 plays, 122 games, 32 teams)
 
-### **Modern UX**
-- **Dark Theme** - Professional interface optimized for long sessions
-- **Responsive Layout** - 40/60 split for chat and visualizations
-- **Loading Indicators** - Clear feedback on AI processing
-- **Zero Emojis** - Clean, professional design
+Correlation with completion (1 if the pass was completed, else 0). For the DSS itself:
+r = -0.0185, p = 0.1098, n = 7510. For the sub-scores:
 
----
+| | mean | sd | r | p |
+|---|---|---|---|---|
+| VA | 65.0163 | 15.2238 | 0.005 | 0.6678 |
+| SD | 71.0002 | 2.9968 | 0.0271 | 0.019 |
+| OD | 29.84 | 14.3135 | -0.0478 | 0.0 (rounded to 4 decimals) |
 
-## Screenshots
+By DSS quintile (lowest to highest), the completion rate is 0.6232, 0.6225, 0.5939, 0.5939 and
+0.6198, with 1502 plays each. The pattern is not monotonic. The written verdict rule in
+`src/nfl_dss/export.py` returns `no_signal`.
 
-### Team Rankings
-![Rankings Dashboard](screenshots/rankings.png)
-*Horizontal bar chart showing DSS rankings for all 32 teams with Viridis color scale*
+The number of frames between snap and release (time to throw) correlates with completion at
+r = -0.1891, far more than DSS does. DSS also differs between coverage schemes (for example
+47.77 in Cover-0 and 59.66 in Quarters), so team differences partly reflect the mix of
+schemes. Per-team means come with bootstrap 95% intervals (2000 resamples, fixed seed) 1.74 to
+2.50 points wide, and with an empirical-Bayes shrunk mean.
 
-### Performance Analysis
-![Performance Scatter](screenshots/performance.png)
-*Correlation analysis between DSS and completion rates (r=0.032)*
+What is not done yet: a held-out model comparison (does DSS improve a baseline that already
+knows time to throw and coverage?). It is tracked in issue #5 and the export field
+`model_comparison` is `null` until then. An earlier version of this README quoted larger
+effects (for example in man coverage); the export does not reproduce them, so they are not
+repeated here.
 
-### Coverage Deep Dive
-![Coverage Box Plots](screenshots/coverage.png)
-*Distribution analysis across 12+ coverage types with statistical insights*
+## Install and use
 
-### Team × Coverage Heatmap
-![Heatmap](screenshots/heatmap.png)
-*Detailed performance matrix showing team effectiveness by coverage scheme*
-
-### Sub-Score Profiles
-![Radar Chart](screenshots/trends.png)
-*Multi-dimensional radar chart for top 8 teams (VA, SD, OD dimensions)*
-
----
-
-## Quick Start
-
-### Prerequisites
+Requires [uv](https://docs.astral.sh/uv/) and Python 3.12.
 
 ```bash
-Python 3.9+
-pip (Python package manager)
+uv sync --frozen
+uv run dss export      # writes exports/site-data.json from output/dss_results.csv
 ```
 
-### Installation
+`export` needs `data/plays.csv` and `data/games.csv` (see Data). `output/dss_results.csv` is the
+precomputed artifact, one row per scored play, kept in the repository.
+
+A full rebuild from tracking data:
 
 ```bash
-# Clone the repository
-git clone https://github.com/florianhemery/nfl-pocket-collapse.git
-cd nfl-pocket-collapse
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the application
-python src/app_nextgen.py
+bash scripts/fetch_data.sh   # needs the kaggle CLI and accepted competition rules
+uv run dss build             # writes output/dss_results.csv
 ```
 
-### Access
+The full rebuild was not run when the package was written: the tracking files were not
+available locally. The pipeline is covered by synthetic fixtures and by an equivalence test
+against the original loop-based implementation (issue #6 tracks the replay feature that also
+needs tracking data).
 
-Open your browser and navigate to:
-```
-http://127.0.0.1:8050
-```
+## Data
 
----
+The Kaggle files are not stored in this repository (see
+[ADR 0005](docs/decisions/0005-donnees-kaggle-hors-depot.md)). The terms of the 2023 edition
+were not verified; recent editions are reported to use CC BY-NC 4.0. Check the
+[competition rules](https://www.kaggle.com/competitions/nfl-big-data-bowl-2023/rules) before
+reusing the data. `data/checksums.sha256` holds the sha256 of the four metadata files.
 
-## AI Configuration
+## Development
 
-The platform supports multiple AI providers. Click **Settings** in the top-right corner to configure:
-
-### Supported Providers
-
-| Provider | Models | Pricing | Notes |
-|----------|--------|---------|-------|
-| **Anthropic Claude** | Sonnet 5.5, Opus 5.5, Fable 5.1, Haiku 5.5 | $0.10 - $50 per MTok | Recommended for best results |
-| **OpenAI** | GPT-4 Turbo, GPT-4, GPT-3.5 Turbo | Standard OpenAI pricing | Most stable API |
-| **Mistral AI** | Large, Small, Open Mixtral, Open Mistral | Free & paid tiers | Good cost/performance |
-| **Google Gemini** | Gemini Pro, Gemini Pro Vision | Free tier available | Great for testing |
-
-### Example Queries
-
-```
-"Analyze SEA defensive performance"
-"Compare coverage effectiveness"
-"Which teams excel at Cover-3?"
-"Show me the top 5 defenses"
-"Explain the DSS metric"
+```bash
+uv run ruff check && uv run ruff format --check
+uv run pyright          # strict
+uv run pytest           # coverage threshold 80 percent
 ```
 
----
-
-## Dataset
-
-- **7,510 NFL plays** from the 2021 season
-- **32 teams** analyzed
-- **12+ coverage types** (Cover-0 to Red Zone)
-- **4 core metrics**:
-  - **DSS** - Defensive Sync Score (composite metric)
-  - **VA** - Velocity Advantage
-  - **SD** - Spacing Discipline  
-  - **OD** - Orientation Divergence
-
----
-
-## Technology Stack
-
-- **Backend**: Python 3.9+
-- **Web Framework**: Plotly Dash 2.x
-- **Visualizations**: Plotly, Plotly Express
-- **Data Processing**: Pandas, NumPy
-- **AI Integration**: OpenAI, Anthropic, Mistral, Google AI SDKs
-- **UI Components**: Dash Bootstrap Components
-
----
-
-## Project Structure
-
-```
-nfl-pocket-collapse/
-├── src/
-│   ├── app_nextgen.py          # Main NextGen application
-│   ├── app.py                  # Legacy Dash app
-│   └── app_v2.py               # V2 with filters
-├── output/
-│   └── dss_results.csv         # Core dataset (7,510 plays)
-├── screenshots/                 # UI screenshots for README
-├── docs/
-│   ├── CLAUDE_2026_MODELS.md   # Claude AI setup guide
-│   ├── TROUBLESHOOTING_COMPLETE.md
-│   └── NEXTGEN_README.md
-├── requirements.txt            # Python dependencies
-└── README.md                   # You are here
-```
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-#### "ID not found in layout"
-✅ **Fixed in v2.0** - Removed dynamic callback that caused race conditions.
-
-#### API Rate Limit (429)
-✅ **Auto-fallback** - Switches to built-in analytics mode automatically.
-
-#### ThinkingBlock AttributeError
-✅ **Fixed** - Properly parses Claude 5.x response structure.
-
-### Need Help?
-
-Check our comprehensive guides:
-- [TROUBLESHOOTING_COMPLETE.md](TROUBLESHOOTING_COMPLETE.md) - Full diagnostic guide
-- [CLAUDE_2026_MODELS.md](CLAUDE_2026_MODELS.md) - Claude AI setup
-- [MISTRAL_TROUBLESHOOTING.md](MISTRAL_TROUBLESHOOTING.md) - Mistral AI guide
-
----
-
-## Roadmap
-
-- [ ] Real-time game tracking
-- [ ] Multi-season comparisons
-- [ ] Player-level analytics
-- [ ] Export to PDF/PowerPoint
-- [ ] Mobile-responsive design
-- [ ] Custom metric builder
-- [ ] Team comparison mode
-- [ ] Historical trend analysis
-
----
-
-## Development History
-
-### v2.0 - NextGen Interface (Oct 2026)
-- ✅ Professional UI without emojis
-- ✅ AI-powered chat with 4 providers
-- ✅ Loading indicators
-- ✅ 40/60 layout split
-- ✅ Built-in analytics fallback
-- ✅ Claude 5.x support
-- ✅ ThinkingBlock parsing
-
-### v1.0 - Original Dashboard
-- Initial Plotly Dash implementation
-- Basic team rankings and filters
-- Static visualizations
-
----
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
+See [AGENTS.md](AGENTS.md), [docs/QUALITY.md](docs/QUALITY.md), the decisions in
+[docs/decisions](docs/decisions) and the data contract in [docs/CONTRACT.md](docs/CONTRACT.md).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## Author
-
-**Florian Hemery**
-
-- GitHub: [@florianhemery](https://github.com/florianhemery)
-- Project: [nfl-pocket-collapse](https://github.com/florianhemery/nfl-pocket-collapse)
-
----
-
-## Acknowledgments
-
-- NFL data from 2021 season analysis
-- Plotly for amazing visualization capabilities
-- Anthropic, OpenAI, Mistral, Google for AI APIs
-- The defensive analytics community
-
----
-
-## Stats
-
-![Code Size](https://img.shields.io/github/languages/code-size/florianhemery/nfl-pocket-collapse)
-![Repo Size](https://img.shields.io/github/repo-size/florianhemery/nfl-pocket-collapse)
-![Last Commit](https://img.shields.io/github/last-commit/florianhemery/nfl-pocket-collapse)
-
----
-
-<p align="center">
-  <strong>Built for NFL Analytics</strong>
-</p>
+MIT, see [LICENSE](LICENSE). The code is MIT; the data keeps its own terms.
