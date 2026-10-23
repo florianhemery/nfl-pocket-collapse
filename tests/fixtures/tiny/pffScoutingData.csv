@@ -1,0 +1,21 @@
+gameId,playId,nflId,pff_role,pff_positionLinedUp
+1,1,41,Pass,QB
+1,1,21,Pass Route,WR-L
+1,1,31,Pass Rush,LEO
+1,1,14,Coverage,MLB
+1,1,11,Coverage,LCB
+1,1,12,Coverage,FS
+1,1,13,Coverage,SS
+1,2,41,Pass,QB
+1,2,21,Pass Route,WR-L
+1,2,31,Pass Rush,LEO
+1,2,14,Coverage,MLB
+1,2,11,Coverage,LCB
+1,2,12,Coverage,FS
+1,3,41,Pass,QB
+1,3,21,Pass Route,WR-L
+1,3,31,Pass Rush,LEO
+1,3,14,Coverage,MLB
+1,3,11,Coverage,LCB
+1,3,12,Coverage,FS
+1,3,13,Coverage,SS
