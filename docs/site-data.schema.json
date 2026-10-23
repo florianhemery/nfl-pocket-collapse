@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/florianhemery/nfl-pocket-collapse/blob/main/docs/site-data.schema.json",
-  "title": "NFL DSS site data (contract v1.1)",
-  "description": "Output of `dss export`. See docs/CONTRACT.md. Unknown fields are rejected on purpose: an addition bumps schema_version. validation.stratified is optional since v1.1.",
+  "title": "NFL DSS site data (contract v1.2)",
+  "description": "Output of `dss export`. See docs/CONTRACT.md. Unknown fields are rejected on purpose: an addition bumps schema_version. validation.stratified is optional since v1.1. validation.model_comparison is the held-out comparison of v1.2 (ADR 0006), or null.",
   "type": "object",
   "properties": {
     "schema_version": {
@@ -339,7 +339,20 @@
                   "type": "array",
                   "items": {
                     "type": "string"
-                  }
+                  },
+                  "minItems": 1
+                },
+                "n_train": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "n_test": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "n_test_games": {
+                  "type": "integer",
+                  "minimum": 1
                 },
                 "baseline_auc": {
                   "type": "number",
@@ -369,17 +382,111 @@
                 "with_dss_brier": {
                   "type": "number",
                   "minimum": 0
+                },
+                "delta_brier": {
+                  "type": "number"
+                },
+                "delta_brier_ci95": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "baseline_logloss": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "with_dss_logloss": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "subscores_auc": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "delta_subscores_auc": {
+                  "type": "number"
+                },
+                "yards": {
+                  "type": "object",
+                  "properties": {
+                    "baseline_rmse": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "with_dss_rmse": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "delta_r2": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "baseline_rmse",
+                    "with_dss_rmse",
+                    "delta_r2"
+                  ],
+                  "additionalProperties": false
+                },
+                "bootstrap": {
+                  "type": "object",
+                  "properties": {
+                    "unit": {
+                      "const": "game"
+                    },
+                    "resamples": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "seed": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "unit",
+                    "resamples",
+                    "seed"
+                  ],
+                  "additionalProperties": false
+                },
+                "decision_rule": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "decision": {
+                  "enum": [
+                    "no_signal",
+                    "weak_signal",
+                    "signal"
+                  ]
                 }
               },
               "required": [
                 "split",
                 "baseline_features",
+                "n_train",
+                "n_test",
+                "n_test_games",
                 "baseline_auc",
                 "with_dss_auc",
                 "delta_auc",
                 "delta_auc_ci95",
                 "baseline_brier",
-                "with_dss_brier"
+                "with_dss_brier",
+                "delta_brier",
+                "delta_brier_ci95",
+                "baseline_logloss",
+                "with_dss_logloss",
+                "subscores_auc",
+                "delta_subscores_auc",
+                "yards",
+                "bootstrap",
+                "decision_rule",
+                "decision"
               ],
               "additionalProperties": false
             }

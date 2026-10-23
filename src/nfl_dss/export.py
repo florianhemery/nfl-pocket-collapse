@@ -21,7 +21,10 @@ import pandas as pd
 from numpy.typing import NDArray
 from scipy import stats
 
-SCHEMA_VERSION = "1.1"
+from nfl_dss.pipeline import CONTEXT_COLUMNS, play_context
+from nfl_dss.validation import model_comparison
+
+SCHEMA_VERSION = "1.2"
 DECIMALS = 4
 #: p-values keep six decimals, floored at this value so that a tiny p is never written as 0.
 P_DECIMALS = 6
@@ -67,7 +70,9 @@ DATASET_LICENSE_NOTE = (
     "Recent Big Data Bowl editions are published under CC BY-NC 4.0 according to secondary "
     "sources. The raw Kaggle files are not tracked in this repository, but a row-level "
     "extract is: output/dss_results.csv holds, for each analyzed play, the game and play "
-    "ids, the defensive team, the PFF coverage labels, the completion flag and the computed "
+    "ids, the season and week, the defensive team, the PFF coverage labels, the completion "
+    "flag, the down, the yards to go, the yards to the end zone (derived from the yard line "
+    "side, the yard line number and the possession team), the yards gained and the computed "
     "scores. Whether redistributing that extract is permitted has not been verified."
 )
 #: Path of the committed export, relative to the repository root.
@@ -93,6 +98,7 @@ RESULT_COLUMNS = [
     "coverage",
     "coverageType",
     "completed",
+    *CONTEXT_COLUMNS,
 ]
 
 FloatArray = NDArray[np.float64]
@@ -178,11 +184,29 @@ def _read_results(path: Path) -> pd.DataFrame:
     return results
 
 
+PLAYS_CHECK_COLUMNS = [
+    "passResult",
+    "defensiveTeam",
+    "possessionTeam",
+    "yardlineSide",
+    "yardlineNumber",
+    "down",
+    "yardsToGo",
+    "playResult",
+]
+
+
 def _check_against_plays(results: pd.DataFrame, plays_path: Path) -> None:
     if not plays_path.is_file():
         raise ExportError(f"missing input file: {plays_path}")
-    plays = pd.read_csv(plays_path, usecols=["gameId", "playId", "passResult", "defensiveTeam"])
-    joined = results.merge(plays, on=["gameId", "playId"], how="left", suffixes=("", "_plays"))
+    plays = pd.read_csv(plays_path)
+    missing = [c for c in PLAYS_CHECK_COLUMNS if c not in plays.columns]
+    if missing:
+        raise ExportError(f"{plays_path} is missing columns: {', '.join(missing)}")
+    reference = plays[["gameId", "playId", "passResult", "defensiveTeam"]].merge(
+        play_context(plays), on=["gameId", "playId"]
+    )
+    joined = results.merge(reference, on=["gameId", "playId"], how="left", suffixes=("", "_plays"))
     if joined["passResult"].isna().any():
         raise ExportError("some results rows are absent from plays.csv")
     expected = (joined["passResult"] == "C").astype(int)
@@ -190,6 +214,8 @@ def _check_against_plays(results: pd.DataFrame, plays_path: Path) -> None:
         joined["defensiveTeam"] != joined["defensiveTeam_plays"]
     ).any():
         raise ExportError("results disagree with plays.csv (completed or defensiveTeam)")
+    if any((joined[c] != joined[f"{c}_plays"]).any() for c in CONTEXT_COLUMNS):
+        raise ExportError(f"results disagree with plays.csv ({', '.join(CONTEXT_COLUMNS)})")
 
 
 def _check_against_games(results: pd.DataFrame, games_path: Path) -> None:
@@ -506,7 +532,7 @@ def build_site_data(
             "quintiles": quintile_table(results),
             "confounders": confounder_table(results),
             "stratified": stratified_validation(results, r, p),
-            "model_comparison": None,
+            "model_comparison": model_comparison(results),
             "verdict": verdict(r, p),
             "verdict_rule": VERDICT_RULE,
         },

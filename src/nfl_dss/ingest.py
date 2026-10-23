@@ -36,6 +36,8 @@ PLAYS_COLUMNS = [
     "pff_passCoverageType",
     "down",
     "yardsToGo",
+    "yardlineSide",
+    "yardlineNumber",
 ]
 GAMES_COLUMNS = ["gameId", "season", "week", "homeTeamAbbr", "visitorTeamAbbr"]
 PLAYERS_COLUMNS = ["nflId", "officialPosition"]

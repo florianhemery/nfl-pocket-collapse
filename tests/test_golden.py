@@ -51,7 +51,13 @@ def test_tiny_play_matches_hand_computation(tiny_data: Path) -> None:
     assert (row["season"], row["week"]) == (2021, 1)
     assert (row["coverage"], row["coverageType"]) == ("Cover-3", "Zone")
     assert row["completed"] == 1
-    raw = {"offensiveTeam", "passResult", "playResult", "down", "yardsToGo", "sacked"}
+    assert (row["down"], row["yardsToGo"], row["yardsToEndzone"], row["playResult"]) == (
+        2,
+        8,
+        70,
+        7,
+    )
+    raw = {"offensiveTeam", "possessionTeam", "passResult", "yardlineSide", "sacked"}
     assert raw.isdisjoint(results.columns)
 
 

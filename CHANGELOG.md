@@ -29,7 +29,25 @@ All notable changes to this project are documented here. The format follows
   AGENTS.md, `docs/QUALITY.md`, ADRs 0001 to 0005.
 - MIT `LICENSE`, `scripts/fetch_data.sh` and `data/checksums.sha256`.
 
+- Held-out validation (issue #5, [ADR 0006](docs/decisions/0006-validation-hors-echantillon-protocole.md)),
+  protocol written before the code: logistic regression on completion, train weeks 1-6 and test
+  weeks 7-8, baseline (time to throw, coverage family and coverage, down, yards to go, yards to
+  the end zone) against baseline plus DSS, AUC, Brier and log loss, paired bootstrap over test
+  games (2000 resamples, fixed seed) and a written decision rule. `nfl_dss.validation` fills
+  `validation.model_comparison`; the README reports the result as is (`no_signal`).
+- Data contract and schema 1.2: `validation.model_comparison` gets `n_train`, `n_test`,
+  `n_test_games`, `delta_brier` and its interval, log loss, `subscores_auc`, a `yards` block,
+  `bootstrap`, `decision_rule` and `decision`.
+- `dss enrich`: adds the play context columns to an existing `output/dss_results.csv` from
+  `data/plays.csv`, without tracking data.
+- `scikit-learn` 1.9.1 as a pinned dependency.
+
 ### Changed
+- `output/dss_results.csv` gains four play-level columns, `down`, `yardsToGo`, `yardsToEndzone`
+  (derived from the yard line) and `playResult`, so that the held-out comparison and the drift
+  guard run in CI without the Kaggle files. ADR 0005, the license note of the export and both
+  READMEs list exactly which row-level fields are tracked; the redistribution terms stay
+  unverified. The export now also checks these columns against `plays.csv` when it is present.
 - README.md rewritten, README.fr.md added in French. Figures are read from the export. The
   earlier README quoted larger effects within man and zone coverage. The export reproduces
   them (median split: 0.5014 versus 0.5616 in man, 0.635 versus 0.6719 in zone). The pooled

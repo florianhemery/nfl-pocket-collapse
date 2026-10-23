@@ -1,4 +1,4 @@
-"""Command line entry point: ``dss build`` and ``dss export``."""
+"""Command line entry point: ``dss build``, ``dss enrich`` and ``dss export``."""
 
 from __future__ import annotations
 
@@ -8,9 +8,12 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import pandas as pd
+
 from nfl_dss.export import ExportError, ExportInputs, build_site_data, git_commit, write_site_data
-from nfl_dss.ingest import InputError
-from nfl_dss.pipeline import build_results, write_results
+from nfl_dss.ingest import PLAYS_COLUMNS, InputError, read_csv
+from nfl_dss.pipeline import build_results, enrich_results, write_results
+from nfl_dss.validation import ValidationError
 
 logger = logging.getLogger("nfl_dss")
 
@@ -27,6 +30,12 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--data-dir", type=Path, default=Path("data"))
     build.add_argument("--tracking-dir", type=Path, default=None)
     build.add_argument("--output", type=Path, default=Path("output/dss_results.csv"))
+
+    enrich = sub.add_parser(
+        "enrich", help="add the play context columns (ADR 0006) to an existing results CSV"
+    )
+    enrich.add_argument("--results", type=Path, default=Path("output/dss_results.csv"))
+    enrich.add_argument("--data-dir", type=Path, default=Path("data"))
 
     export = sub.add_parser("export", help="write exports/site-data.json from the results CSV")
     export.add_argument("--results", type=Path, default=Path("output/dss_results.csv"))
@@ -48,6 +57,14 @@ def run_build(args: argparse.Namespace) -> None:
     logger.info("wrote %s (%d plays)", args.output, len(results))
 
 
+def run_enrich(args: argparse.Namespace) -> None:
+    results = pd.read_csv(args.results)
+    plays = read_csv(args.data_dir / "plays.csv", PLAYS_COLUMNS)
+    enriched = enrich_results(results, plays)
+    write_results(enriched, args.results)
+    logger.info("wrote %s (%d plays)", args.results, len(enriched))
+
+
 def run_export(args: argparse.Namespace) -> None:
     data_dir: Path = args.data_dir
     if args.results_only:
@@ -67,9 +84,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "build":
             run_build(args)
+        elif args.command == "enrich":
+            run_enrich(args)
         else:
             run_export(args)
-    except (InputError, ExportError) as error:
+    except (InputError, ExportError, ValidationError) as error:
         logger.error("error: %s", error)
         return EXIT_INPUT
     return EXIT_OK
