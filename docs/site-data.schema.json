@@ -1,0 +1,516 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/florianhemery/nfl-pocket-collapse/blob/main/docs/site-data.schema.json",
+  "title": "NFL DSS site data (contract v1)",
+  "description": "Output of `dss export`. See docs/CONTRACT.md. Unknown fields are rejected on purpose: an addition bumps schema_version.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "pipeline_commit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generated_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "dataset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_license_note": {
+          "type": "string",
+          "minLength": 1
+        },
+        "input_sha256": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "plays_analyzed": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "games": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "teams": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "pipeline_commit",
+        "generated_at",
+        "dataset",
+        "dataset_license_note",
+        "input_sha256",
+        "plays_analyzed",
+        "games",
+        "teams"
+      ],
+      "additionalProperties": false
+    },
+    "metric": {
+      "type": "object",
+      "properties": {
+        "formula": {
+          "type": "string"
+        },
+        "subscores": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "enum": [
+                  "va",
+                  "sd",
+                  "od"
+                ]
+              },
+              "label": {
+                "type": "string"
+              },
+              "mean": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "sd": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "r_completed": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1
+              },
+              "p_completed": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "mean",
+              "sd",
+              "r_completed",
+              "p_completed"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "formula",
+        "subscores"
+      ],
+      "additionalProperties": false
+    },
+    "validation": {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "const": "completed"
+        },
+        "pearson_dss_completed": {
+          "type": "object",
+          "properties": {
+            "r": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "p": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "n": {
+              "type": "integer",
+              "minimum": 3
+            }
+          },
+          "required": [
+            "r",
+            "p",
+            "n"
+          ],
+          "additionalProperties": false
+        },
+        "quintiles": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "properties": {
+              "q": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5
+              },
+              "dss_min": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "dss_max": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "completion_rate": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "n": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "q",
+              "dss_min",
+              "dss_max",
+              "completion_rate",
+              "n"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "confounders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "r_completed": {
+                "type": "number",
+                "minimum": -1,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "r_completed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "model_comparison": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "split": {
+                  "type": "string"
+                },
+                "baseline_features": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "baseline_auc": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "with_dss_auc": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "delta_auc": {
+                  "type": "number"
+                },
+                "delta_auc_ci95": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "baseline_brier": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "with_dss_brier": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "split",
+                "baseline_features",
+                "baseline_auc",
+                "with_dss_auc",
+                "delta_auc",
+                "delta_auc_ci95",
+                "baseline_brier",
+                "with_dss_brier"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "verdict": {
+          "enum": [
+            "no_signal",
+            "weak_signal",
+            "signal"
+          ]
+        },
+        "verdict_rule": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "outcome",
+        "pearson_dss_completed",
+        "quintiles",
+        "confounders",
+        "model_comparison",
+        "verdict",
+        "verdict_rule"
+      ],
+      "additionalProperties": false
+    },
+    "teams": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "team": {
+            "type": "string",
+            "minLength": 1
+          },
+          "n": {
+            "type": "integer",
+            "minimum": 2
+          },
+          "dss_mean": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "dss_ci95": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "dss_shrunk": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "completion_rate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "team",
+          "n",
+          "dss_mean",
+          "dss_ci95",
+          "dss_shrunk",
+          "completion_rate"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "coverages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "coverage": {
+            "type": "string"
+          },
+          "coverage_type": {
+            "type": "string"
+          },
+          "n": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "dss_mean": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "completion_rate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "coverage",
+          "coverage_type",
+          "n",
+          "dss_mean",
+          "completion_rate"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "replays": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "game_id": {
+            "type": "integer"
+          },
+          "play_id": {
+            "type": "integer"
+          },
+          "defensive_team": {
+            "type": "string"
+          },
+          "coverage": {
+            "type": "string"
+          },
+          "pass_result": {
+            "type": "string"
+          },
+          "dss": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "fps": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "frames": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "frame": {
+                  "type": "integer"
+                },
+                "event": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "dss_frame": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "players": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      },
+                      "side": {
+                        "enum": [
+                          "off",
+                          "def",
+                          "ball"
+                        ]
+                      },
+                      "db": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "x",
+                      "y",
+                      "side",
+                      "db"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "frame",
+                "event",
+                "dss_frame",
+                "players"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "game_id",
+          "play_id",
+          "defensive_team",
+          "coverage",
+          "pass_result",
+          "dss",
+          "fps",
+          "frames"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "provenance",
+    "metric",
+    "validation",
+    "teams",
+    "coverages",
+    "replays"
+  ],
+  "additionalProperties": false
+}
