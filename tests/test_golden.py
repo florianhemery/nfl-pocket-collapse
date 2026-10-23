@@ -47,9 +47,12 @@ def test_tiny_play_matches_hand_computation(tiny_data: Path) -> None:
     assert row["num_dbs"] == 3
     assert row["frames_analyzed"] == 4
     assert (row["gameId"], row["playId"]) == (1, 1)
-    assert (row["defensiveTeam"], row["offensiveTeam"]) == ("HOM", "VIS")
+    assert row["defensiveTeam"] == "HOM"
+    assert (row["season"], row["week"]) == (2021, 1)
     assert (row["coverage"], row["coverageType"]) == ("Cover-3", "Zone")
-    assert (row["completed"], row["sacked"]) == (1, 0)
+    assert row["completed"] == 1
+    raw = {"offensiveTeam", "passResult", "playResult", "down", "yardsToGo", "sacked"}
+    assert raw.isdisjoint(results.columns)
 
 
 def test_team_abbreviations_give_the_same_result(tiny_data: Path) -> None:

@@ -31,18 +31,14 @@ RESULT_COLUMNS = [
     "od",
     "num_dbs",
     "frames_analyzed",
+    "season",
+    "week",
     "gameId",
     "playId",
     "defensiveTeam",
-    "offensiveTeam",
-    "passResult",
-    "playResult",
     "coverage",
     "coverageType",
-    "down",
-    "yardsToGo",
     "completed",
-    "sacked",
 ]
 
 
@@ -156,29 +152,21 @@ def score_plays(
     return aggregate_plays(frame_table(rows), num_dbs, weights, decimals)
 
 
-def attach_play_metadata(scores: pd.DataFrame, plays: pd.DataFrame) -> pd.DataFrame:
-    """Add team, result, coverage and situation columns, in the layout of ``RESULT_COLUMNS``."""
+def attach_play_metadata(
+    scores: pd.DataFrame, plays: pd.DataFrame, games: pd.DataFrame
+) -> pd.DataFrame:
+    """Add season, week, team, coverage and the completion flag, in ``RESULT_COLUMNS`` order.
+
+    Only what the export needs is kept: raw competition columns such as the pass result, the
+    yardage, the down or the offensive team are read to derive ``completed`` but never written.
+    """
     meta = plays.rename(
-        columns={
-            "possessionTeam": "offensiveTeam",
-            "pff_passCoverage": "coverage",
-            "pff_passCoverageType": "coverageType",
-        }
+        columns={"pff_passCoverage": "coverage", "pff_passCoverageType": "coverageType"}
     )
-    cols = [
-        *PLAY_KEY,
-        "defensiveTeam",
-        "offensiveTeam",
-        "passResult",
-        "playResult",
-        "coverage",
-        "coverageType",
-        "down",
-        "yardsToGo",
-    ]
+    cols = [*PLAY_KEY, "defensiveTeam", "passResult", "coverage", "coverageType"]
     merged = scores.merge(meta[cols], on=PLAY_KEY, how="inner")
+    merged = merged.merge(games[["gameId", "season", "week"]], on="gameId", how="inner")
     merged["completed"] = (merged["passResult"] == "C").astype("int64")
-    merged["sacked"] = (merged["passResult"] == "S").astype("int64")
     return merged[RESULT_COLUMNS].sort_values(PLAY_KEY).reset_index(drop=True)
 
 
@@ -192,7 +180,7 @@ def build_results(data_dir: Path, tracking_dir: Path) -> pd.DataFrame:
         )
         parts.append(score_plays(secondary))
     scores = pd.concat(parts, ignore_index=True)
-    results = attach_play_metadata(scores, meta.plays)
+    results = attach_play_metadata(scores, meta.plays, meta.games)
     logger.info("scored %d plays", len(results))
     return results
 
