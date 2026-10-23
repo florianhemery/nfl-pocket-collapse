@@ -1,0 +1,14 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "timezone": "Europe/Paris",
+  "schedule": ["before 6am on monday"],
+  "lockFileMaintenance": { "enabled": true },
+  "packageRules": [
+    {
+      "description": "Group the lint and type tooling so one PR moves them together",
+      "matchPackageNames": ["ruff", "pyright", "pandas-stubs", "scipy-stubs"],
+      "groupName": "quality tooling"
+    }
+  ]
+}
