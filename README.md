@@ -8,7 +8,9 @@ The short answer from the data in this repository: pooled over all plays, the me
 linear association with pass completion. That null result is misleading on its own. Inside each
 coverage family the association is real and has the expected sign, and it disappears once time
 to throw and coverage family are controlled. The metric has not been shown to carry
-information about completions beyond those two variables. Every number on this page is read
+information about completions beyond those two variables, and a held-out test fixed in advance
+finds no gain from adding it to a model that already knows them (decision `no_signal`, see
+"Held-out test"). Every number on this page is read
 from [`exports/site-data.json`](exports/site-data.json), which `uv run dss export` regenerates
 from the precomputed results.
 
@@ -88,12 +90,46 @@ points wide, and with an empirical-Bayes shrunk mean. DSS differs between covera
 (for example 47.77 in Cover-0 and 59.66 in Quarters), and no adjustment for the mix of schemes
 a team plays is made, so a team's mean is not a clean measure of its coordination.
 
-### Not done yet
+### Held-out test
 
-A held-out model comparison (does DSS improve a baseline that already knows time to throw and
-coverage?). It is tracked in issue #5 and the export field `model_comparison` is `null` until
-then. Until it exists, the claim supported by this repository is limited to what is above: no
-pooled association, a within-family association that does not survive the two controls.
+The question left open above is predictive: on plays a model has never seen, does the DSS add
+anything to what the context of the play already says? The protocol was written and committed
+before any model was fitted ([ADR 0006](docs/decisions/0006-validation-hors-echantillon-protocole.md)).
+It is the only confirmatory test of this project; everything else below is exploratory.
+
+- Split: plays of weeks 1 to 6 train (5799 plays), plays of weeks 7 and 8 test (1711 plays, 28
+  games). Models are fitted once.
+- Baseline: time to throw (`frames_analyzed`), coverage family, coverage, down, yards to go
+  and yards to the opponent end zone. Model: logistic regression (scikit-learn, L2, `C = 1.0`,
+  nothing tuned). The ADR replaces `absoluteYardlineNumber` by the yards to the end zone, because
+  the former does not say which way the offense is going.
+- Compared: the baseline against the baseline plus DSS. Uncertainty: paired bootstrap over the
+  test games (2000 resamples, seed 20261024, 95% percentile interval).
+- Decision rule, written in advance: `signal` if the lower bound of the AUC gain is above 0;
+  `weak_signal` if not and the gain is above 0.005; `no_signal` otherwise.
+
+| Test set (1711 plays) | baseline | baseline plus DSS | difference (95% interval) |
+|---|---|---|---|
+| AUC | 0.6489 | 0.649 | 0.0001 (-0.0021 to 0.0022) |
+| Brier score | 0.2242 | 0.2242 | -0.0001 (-0.0004 to 0.0003) |
+| log loss | 0.6395 | 0.6394 | |
+
+Decision: `no_signal`. The AUC gain is 0.0001 and its interval, -0.0021 to 0.0022, contains 0. On this test set and with these linear models, the DSS does not
+improve the prediction of completions beyond time to throw, coverage, down, distance and field
+position. That is an absence of detected gain, not a proof that the DSS is useless: the test
+set is one season, 1711 plays, and the interval does not cover the uncertainty of the training
+sample.
+
+Exploratory, and not part of the decision:
+
+- Replacing the DSS by its three sub-scores (VA, SD, OD) gives a test AUC of 0.6491, 0.0002
+  above the baseline.
+- Yards gained (`playResult`, linear regression): test RMSE 10.0654 for the baseline, 10.0482
+  with the DSS, and a gain in R2 of 0.0033.
+
+Limits: one split, linear models without interactions, one season, bootstrap over games only,
+and the weeks 7 and 8 had already been seen through the descriptive correlations above (they
+were not used to choose anything in the protocol).
 
 ## Install and use
 
@@ -102,6 +138,7 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.12.
 ```bash
 uv sync --frozen
 uv run dss export      # writes exports/site-data.json from output/dss_results.csv
+uv run dss enrich      # only to add the play context columns to an older results file
 ```
 
 `output/dss_results.csv` is the precomputed artifact, one row per scored play, kept in the
@@ -128,8 +165,10 @@ The raw Kaggle files are not stored in this repository (see
 [ADR 0005](docs/decisions/0005-donnees-kaggle-hors-depot.md)). A row-level extract is:
 `output/dss_results.csv` has one row per analyzed play with the scores, the game and play ids,
 the season and week, the defensive team, the PFF coverage labels (`coverage`, `coverageType`)
-and the completion flag. Other competition columns (pass and play results, down, yardage,
-offensive team) are not kept. The terms of the 2023 edition were not verified, and recent
+and the completion flag. It also keeps the play context used by the held-out test:
+`down`, `yardsToGo`, `yardsToEndzone` (derived from the yard line side, the yard line number and
+the possession team) and `playResult`. Other competition columns (pass result, offensive team,
+`absoluteYardlineNumber` and the rest of `plays.csv`) are not kept. The terms of the 2023 edition were not verified, and recent
 editions are reported to use CC BY-NC 4.0, so whether redistributing that extract is permitted
 is unverified. Check the
 [competition rules](https://www.kaggle.com/competitions/nfl-big-data-bowl-2023/rules) before

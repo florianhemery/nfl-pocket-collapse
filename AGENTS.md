@@ -8,6 +8,7 @@
 - Install : `uv sync --frozen` (Python 3.12, `uv` seul, jamais `pip install`).
 - Tout verifier : `uv run ruff check && uv run ruff format --check && uv run pyright && uv run pytest`
 - Export du site : `uv run dss export` (ecrit `exports/site-data.json`). Sans les fichiers Kaggle : `uv run dss export --results-only`.
+- Ajouter les colonnes de contexte a un ancien `output/dss_results.csv` : `uv run dss enrich` (donnees Kaggle requises).
 - Reconstruction complete : `bash scripts/fetch_data.sh` puis `uv run dss build` (donnees de suivi Kaggle requises, hors depot).
 
 ## Definition de "termine"
@@ -24,3 +25,4 @@ Ruff, pyright strict et pytest verts (couverture >= 80 %), `exports/site-data.js
 ## Zones fragiles
 - `src/nfl_dss/metrics.py` : les formules ne changent que par un ADR et un nouveau test d'equivalence.
 - `data/` : jamais de CSV Kaggle dans le depot (voir ADR 0005).
+- `src/nfl_dss/validation.py` : le protocole (decoupage, variables, modeles, regle de decision) est pre-enregistre dans l'ADR 0006 ; ne le changer qu'avec un nouvel ADR, jamais apres avoir vu un resultat.

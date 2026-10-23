@@ -8,7 +8,9 @@ La réponse courte, d'après les données de ce dépôt : toutes passes confondu
 montre aucune association linéaire avec la complétion. Ce résultat nul est trompeur pris seul.
 Dans chaque famille de couverture l'association est réelle et du signe attendu, et elle disparaît
 dès que le temps avant le lancer et la famille de couverture sont contrôlés. On n'a pas montré
-que la métrique apporte une information sur les complétions au-delà de ces deux variables.
+que la métrique apporte une information sur les complétions au-delà de ces deux variables, et un
+test sur données mises de côté, fixé à l'avance, ne trouve aucun gain à l'ajouter à un modèle qui
+les connaît déjà (décision `no_signal`, voir « Test sur données mises de côté »).
 Chaque nombre de cette page est lu dans [`exports/site-data.json`](exports/site-data.json), que
 `uv run dss export` régénère à partir des résultats précalculés.
 
@@ -90,13 +92,48 @@ par Bayes empirique. Le DSS diffère selon le schéma de couverture (par exemple
 et 59,66 en Quarters), et aucun ajustement pour le mélange de schémas d'une équipe n'est fait :
 la moyenne d'une équipe n'est donc pas une mesure propre de sa coordination.
 
-### Ce qui n'est pas encore fait
+### Test sur données mises de côté
 
-Une comparaison de modèles sur données mises de côté (le DSS améliore-t-il une base qui connaît
-déjà le temps avant le lancer et la couverture ?). Elle est suivie dans l'issue #5 et le champ
-d'export `model_comparison` vaut `null` d'ici là. Tant qu'elle n'existe pas, ce que ce dépôt
-soutient se limite à ce qui précède : pas d'association globale, une association interne aux
-familles qui ne survit pas aux deux contrôles.
+La question laissée ouverte plus haut est prédictive : sur des passes qu'un modèle n'a jamais
+vues, le DSS ajoute-t-il quelque chose à ce que le contexte de la passe dit déjà ? Le protocole a
+été écrit et commité avant l'ajustement du moindre modèle
+([ADR 0006](docs/decisions/0006-validation-hors-echantillon-protocole.md)). C'est le seul test
+confirmatoire du projet ; tout le reste ci-dessous est exploratoire.
+
+- Découpage : les passes des semaines 1 à 6 entraînent (5799 passes), celles des semaines 7 et 8
+  testent (1711 passes, 28 matchs). Les modèles sont ajustés une seule fois.
+- Base : temps avant le lancer (`frames_analyzed`), famille de couverture, couverture, down,
+  distance à parcourir et distance à la ligne d'en-but adverse. Modèle : régression logistique
+  (scikit-learn, L2, `C = 1.0`, rien n'est réglé). L'ADR remplace `absoluteYardlineNumber` par la
+  distance à la ligne d'en-but, car le premier ne dit pas dans quel sens attaque l'offensive.
+- Comparaison : la base contre la base plus le DSS. Incertitude : bootstrap apparié sur les
+  matchs de test (2000 rééchantillonnages, graine 20261024, intervalle percentile à 95 %).
+- Règle de décision, écrite à l'avance : `signal` si la borne basse du gain d'AUC est au-dessus de
+  0 ; `weak_signal` sinon et si le gain dépasse 0,005 ; `no_signal` dans les autres cas.
+
+| Jeu de test (1711 passes) | base | base plus DSS | différence (intervalle à 95 %) |
+|---|---|---|---|
+| AUC | 0,6489 | 0,649 | 0,0001 (-0,0021 à 0,0022) |
+| Score de Brier | 0,2242 | 0,2242 | -0,0001 (-0,0004 à 0,0003) |
+| log loss | 0,6395 | 0,6394 | |
+
+Décision : `no_signal`. Le gain d'AUC est de 0,0001 et son intervalle, -0,0021 à 0,0022, contient
+0. Sur ce jeu de test et avec ces modèles linéaires, le DSS n'améliore pas la prédiction des
+complétions au-delà du temps avant le lancer, de la couverture, du down, de la distance et de la
+position sur le terrain. C'est une absence de gain détecté, pas la preuve que le DSS est inutile :
+le jeu de test couvre une saison et 1711 passes, et l'intervalle ne couvre pas l'incertitude de
+l'échantillon d'entraînement.
+
+Exploratoire, et sans effet sur la décision :
+
+- Remplacer le DSS par ses trois sous-scores (VA, SD, OD) donne une AUC de test de 0,6491, soit
+  0,0002 de plus que la base.
+- Yards gagnés (`playResult`, régression linéaire) : RMSE de test de 10,0654 pour la base, 10,0482
+  avec le DSS, et un gain de R2 de 0,0033.
+
+Limites : un seul découpage, des modèles linéaires sans interactions, une saison, un bootstrap
+sur les matchs seulement, et les semaines 7 et 8 avaient déjà été vues par les corrélations
+descriptives ci-dessus (elles n'ont servi à rien choisir dans le protocole).
 
 ## Installation et usage
 
@@ -105,6 +142,7 @@ Nécessite [uv](https://docs.astral.sh/uv/) et Python 3.12.
 ```bash
 uv sync --frozen
 uv run dss export      # écrit exports/site-data.json depuis output/dss_results.csv
+uv run dss enrich      # seulement pour ajouter les colonnes de contexte à un ancien fichier de résultats
 ```
 
 `output/dss_results.csv` est l'artefact précalculé, une ligne par passe notée, conservé dans le
@@ -131,9 +169,11 @@ Les fichiers Kaggle bruts ne sont pas stockés dans ce dépôt (voir
 [ADR 0005](docs/decisions/0005-donnees-kaggle-hors-depot.md)). Un extrait au niveau des lignes
 l'est : `output/dss_results.csv` contient une ligne par passe analysée avec les scores, les
 identifiants de match et de passe, la saison et la semaine, l'équipe défensive, les étiquettes
-de couverture PFF (`coverage`, `coverageType`) et l'indicateur de complétion. Les autres colonnes
-de la compétition (résultats de passe et de jeu, down, distance, équipe offensive) ne sont pas
-conservées. Les conditions de l'édition 2023 n'ont pas été vérifiées et les éditions récentes
+de couverture PFF (`coverage`, `coverageType`) et l'indicateur de complétion. Il conserve aussi le
+contexte de la passe utilisé par le test sur données mises de côté : `down`, `yardsToGo`,
+`yardsToEndzone` (dérivée du côté du terrain, du numéro de ligne et de l'équipe en possession) et
+`playResult`. Les autres colonnes de la compétition (résultat de passe, équipe offensive,
+`absoluteYardlineNumber` et le reste de `plays.csv`) ne sont pas conservées. Les conditions de l'édition 2023 n'ont pas été vérifiées et les éditions récentes
 seraient sous CC BY-NC 4.0 : savoir si la redistribution de cet extrait est permise n'est donc
 pas vérifié. Lisez les
 [règles de la compétition](https://www.kaggle.com/competitions/nfl-big-data-bowl-2023/rules)
