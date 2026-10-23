@@ -1,8 +1,21 @@
-data/tracking/*.csv
-*.pyc
+# Kaggle files are not redistributed (ADR 0005); fetch them with scripts/fetch_data.sh
+data/*.csv
+data/tracking/
+!data/checksums.sha256
+
+# Python
 __pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+
+# Heavy generated artifacts (output/dss_results.csv stays tracked)
 output/*.png
 output/*.gif
 output/*.mp4
 output/*.html
-.venv/

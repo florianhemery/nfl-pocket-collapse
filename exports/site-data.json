@@ -1,0 +1,582 @@
+{
+  "schema_version": "1.1",
+  "provenance": {
+    "pipeline_commit": "c8fbfa3",
+    "generated_at": "2026-10-23T21:59:47Z",
+    "dataset": "NFL Big Data Bowl 2023 (2021 season, weeks 1-8)",
+    "dataset_license_note": "The terms of the 2023 competition were not verified by the producer of this file. Recent Big Data Bowl editions are published under CC BY-NC 4.0 according to secondary sources. The raw Kaggle files are not tracked in this repository, but a row-level extract is: output/dss_results.csv holds, for each analyzed play, the game and play ids, the defensive team, the PFF coverage labels, the completion flag and the computed scores. Whether redistributing that extract is permitted has not been verified.",
+    "input_sha256": {
+      "dss_results.csv": "5b780cb796d9f5ac7b278974f27488a8f82fd8e08e876d76f559e1ddd7b97cd3",
+      "games.csv": "1770c67529d1641683fff2666833fe15b03933c2d3242e2b5afb777c193c50c0",
+      "plays.csv": "bfb36981ae2f187d50a0337dc6bce8beb01e1d08f2cded83e3eba3842c9a0237"
+    },
+    "plays_analyzed": 7510,
+    "games": 122,
+    "teams": 32
+  },
+  "metric": {
+    "formula": "DSS = 100 * (0.40*VA + 0.30*SD + 0.30*OD)",
+    "subscores": [
+      {
+        "id": "va",
+        "label": "Velocity Alignment",
+        "mean": 65.0163,
+        "sd": 15.2238,
+        "r_completed": 0.005,
+        "p_completed": 0.667767
+      },
+      {
+        "id": "sd",
+        "label": "Spacing Discipline",
+        "mean": 71.0002,
+        "sd": 2.9968,
+        "r_completed": 0.0271,
+        "p_completed": 0.019032
+      },
+      {
+        "id": "od",
+        "label": "Orientation Divergence",
+        "mean": 29.84,
+        "sd": 14.3135,
+        "r_completed": -0.0478,
+        "p_completed": 3.4e-05
+      }
+    ]
+  },
+  "validation": {
+    "outcome": "completed",
+    "pearson_dss_completed": {
+      "r": -0.0185,
+      "p": 0.109833,
+      "n": 7510
+    },
+    "quintiles": [
+      {
+        "q": 1,
+        "dss_min": 27.0,
+        "dss_max": 49.24,
+        "completion_rate": 0.6232,
+        "n": 1502
+      },
+      {
+        "q": 2,
+        "dss_min": 49.24,
+        "dss_max": 54.59,
+        "completion_rate": 0.6225,
+        "n": 1502
+      },
+      {
+        "q": 3,
+        "dss_min": 54.6,
+        "dss_max": 58.67,
+        "completion_rate": 0.5939,
+        "n": 1502
+      },
+      {
+        "q": 4,
+        "dss_min": 58.67,
+        "dss_max": 63.26,
+        "completion_rate": 0.5939,
+        "n": 1502
+      },
+      {
+        "q": 5,
+        "dss_min": 63.26,
+        "dss_max": 82.15,
+        "completion_rate": 0.6198,
+        "n": 1502
+      }
+    ],
+    "confounders": [
+      {
+        "id": "frames_analyzed",
+        "label": "Time to throw (frames)",
+        "r_completed": -0.1891
+      }
+    ],
+    "stratified": {
+      "by": "coverage_type",
+      "strata": [
+        {
+          "stratum": "Zone",
+          "n": 4943,
+          "r": -0.0477,
+          "p": 0.000793,
+          "completion_high_dss": 0.635,
+          "completion_low_dss": 0.6719
+        },
+        {
+          "stratum": "Man",
+          "n": 2160,
+          "r": -0.0708,
+          "p": 0.000997,
+          "completion_high_dss": 0.5014,
+          "completion_low_dss": 0.5616
+        },
+        {
+          "stratum": "Other",
+          "n": 407,
+          "r": -0.0741,
+          "p": 0.135459,
+          "completion_high_dss": 0.4755,
+          "completion_low_dss": 0.5468
+        }
+      ],
+      "adjusted": {
+        "method": "partial correlation of DSS and completed controlling for frames_analyzed and coverage_type",
+        "controls": [
+          "frames_analyzed",
+          "coverage_type"
+        ],
+        "r": -0.004,
+        "p": 0.731144,
+        "n": 7510
+      },
+      "reading": "simpson"
+    },
+    "model_comparison": null,
+    "verdict": "no_signal",
+    "verdict_rule": "Outcome: pass completed (1) or not (0). Let r be the Pearson correlation between DSS and the outcome over all analyzed plays. The hypothesis is that a higher DSS means fewer completions, so only r < 0 counts. signal: p < 0.01 and |r| >= 0.1. weak_signal: p < 0.05, r < 0, and not signal. no_signal: anything else, including a significant positive r. This rule looks at the descriptive correlation only and does not account for confounding (see validation.stratified); the held-out model comparison (model_comparison) is reported separately when available."
+  },
+  "teams": [
+    {
+      "team": "ARI",
+      "n": 226,
+      "dss_mean": 57.7713,
+      "dss_ci95": [
+        56.6626,
+        58.879
+      ],
+      "dss_shrunk": 57.6109,
+      "completion_rate": 0.5841
+    },
+    {
+      "team": "ATL",
+      "n": 192,
+      "dss_mean": 54.2298,
+      "dss_ci95": [
+        53.0314,
+        55.3417
+      ],
+      "dss_shrunk": 54.4463,
+      "completion_rate": 0.6562
+    },
+    {
+      "team": "BAL",
+      "n": 234,
+      "dss_mean": 57.5849,
+      "dss_ci95": [
+        56.6597,
+        58.5623
+      ],
+      "dss_shrunk": 57.4836,
+      "completion_rate": 0.594
+    },
+    {
+      "team": "BUF",
+      "n": 213,
+      "dss_mean": 56.7724,
+      "dss_ci95": [
+        55.7635,
+        57.8032
+      ],
+      "dss_shrunk": 56.7282,
+      "completion_rate": 0.5399
+    },
+    {
+      "team": "CAR",
+      "n": 233,
+      "dss_mean": 56.5985,
+      "dss_ci95": [
+        55.6033,
+        57.6386
+      ],
+      "dss_shrunk": 56.569,
+      "completion_rate": 0.5751
+    },
+    {
+      "team": "CHI",
+      "n": 210,
+      "dss_mean": 55.603,
+      "dss_ci95": [
+        54.6113,
+        56.4973
+      ],
+      "dss_shrunk": 55.6498,
+      "completion_rate": 0.5905
+    },
+    {
+      "team": "CIN",
+      "n": 290,
+      "dss_mean": 55.9749,
+      "dss_ci95": [
+        55.0462,
+        56.8384
+      ],
+      "dss_shrunk": 55.9921,
+      "completion_rate": 0.6414
+    },
+    {
+      "team": "CLE",
+      "n": 227,
+      "dss_mean": 56.0165,
+      "dss_ci95": [
+        54.9352,
+        57.0435
+      ],
+      "dss_shrunk": 56.0378,
+      "completion_rate": 0.5286
+    },
+    {
+      "team": "DAL",
+      "n": 231,
+      "dss_mean": 55.5612,
+      "dss_ci95": [
+        54.5176,
+        56.5801
+      ],
+      "dss_shrunk": 55.6199,
+      "completion_rate": 0.6147
+    },
+    {
+      "team": "DEN",
+      "n": 235,
+      "dss_mean": 52.3434,
+      "dss_ci95": [
+        51.3466,
+        53.3546
+      ],
+      "dss_shrunk": 52.6605,
+      "completion_rate": 0.5447
+    },
+    {
+      "team": "DET",
+      "n": 192,
+      "dss_mean": 54.8092,
+      "dss_ci95": [
+        53.599,
+        56.0452
+      ],
+      "dss_shrunk": 54.9783,
+      "completion_rate": 0.6458
+    },
+    {
+      "team": "GB",
+      "n": 242,
+      "dss_mean": 52.8098,
+      "dss_ci95": [
+        51.7744,
+        53.8044
+      ],
+      "dss_shrunk": 53.0962,
+      "completion_rate": 0.6116
+    },
+    {
+      "team": "HOU",
+      "n": 202,
+      "dss_mean": 56.6497,
+      "dss_ci95": [
+        55.6357,
+        57.6673
+      ],
+      "dss_shrunk": 56.6172,
+      "completion_rate": 0.6188
+    },
+    {
+      "team": "IND",
+      "n": 233,
+      "dss_mean": 57.8057,
+      "dss_ci95": [
+        56.8075,
+        58.7638
+      ],
+      "dss_shrunk": 57.6818,
+      "completion_rate": 0.6867
+    },
+    {
+      "team": "JAX",
+      "n": 200,
+      "dss_mean": 55.3798,
+      "dss_ci95": [
+        54.3221,
+        56.4636
+      ],
+      "dss_shrunk": 55.4572,
+      "completion_rate": 0.68
+    },
+    {
+      "team": "KC",
+      "n": 231,
+      "dss_mean": 56.8953,
+      "dss_ci95": [
+        55.7785,
+        58.0169
+      ],
+      "dss_shrunk": 56.8353,
+      "completion_rate": 0.6277
+    },
+    {
+      "team": "LA",
+      "n": 276,
+      "dss_mean": 58.6411,
+      "dss_ci95": [
+        57.6805,
+        59.5594
+      ],
+      "dss_shrunk": 58.4802,
+      "completion_rate": 0.6377
+    },
+    {
+      "team": "LAC",
+      "n": 195,
+      "dss_mean": 51.4919,
+      "dss_ci95": [
+        50.3731,
+        52.6094
+      ],
+      "dss_shrunk": 51.9332,
+      "completion_rate": 0.6
+    },
+    {
+      "team": "LV",
+      "n": 236,
+      "dss_mean": 58.1254,
+      "dss_ci95": [
+        57.0707,
+        59.129
+      ],
+      "dss_shrunk": 57.9706,
+      "completion_rate": 0.6356
+    },
+    {
+      "team": "MIA",
+      "n": 273,
+      "dss_mean": 56.7567,
+      "dss_ci95": [
+        55.7408,
+        57.8142
+      ],
+      "dss_shrunk": 56.7168,
+      "completion_rate": 0.6374
+    },
+    {
+      "team": "MIN",
+      "n": 216,
+      "dss_mean": 57.5469,
+      "dss_ci95": [
+        56.5904,
+        58.5587
+      ],
+      "dss_shrunk": 57.4513,
+      "completion_rate": 0.5509
+    },
+    {
+      "team": "NE",
+      "n": 253,
+      "dss_mean": 57.364,
+      "dss_ci95": [
+        56.4612,
+        58.1966
+      ],
+      "dss_shrunk": 57.2996,
+      "completion_rate": 0.5731
+    },
+    {
+      "team": "NO",
+      "n": 240,
+      "dss_mean": 57.1516,
+      "dss_ci95": [
+        56.1326,
+        58.1189
+      ],
+      "dss_shrunk": 57.0786,
+      "completion_rate": 0.5708
+    },
+    {
+      "team": "NYG",
+      "n": 258,
+      "dss_mean": 55.0403,
+      "dss_ci95": [
+        54.0923,
+        55.9769
+      ],
+      "dss_shrunk": 55.1262,
+      "completion_rate": 0.6318
+    },
+    {
+      "team": "NYJ",
+      "n": 224,
+      "dss_mean": 57.0414,
+      "dss_ci95": [
+        55.7536,
+        58.2543
+      ],
+      "dss_shrunk": 56.9482,
+      "completion_rate": 0.6339
+    },
+    {
+      "team": "PHI",
+      "n": 226,
+      "dss_mean": 56.6977,
+      "dss_ci95": [
+        55.6568,
+        57.6732
+      ],
+      "dss_shrunk": 56.6621,
+      "completion_rate": 0.6991
+    },
+    {
+      "team": "PIT",
+      "n": 219,
+      "dss_mean": 54.6007,
+      "dss_ci95": [
+        53.5263,
+        55.6165
+      ],
+      "dss_shrunk": 54.7416,
+      "completion_rate": 0.6256
+    },
+    {
+      "team": "SEA",
+      "n": 274,
+      "dss_mean": 59.0393,
+      "dss_ci95": [
+        58.0869,
+        59.9559
+      ],
+      "dss_shrunk": 58.8325,
+      "completion_rate": 0.6241
+    },
+    {
+      "team": "SF",
+      "n": 196,
+      "dss_mean": 58.6867,
+      "dss_ci95": [
+        57.4971,
+        59.7823
+      ],
+      "dss_shrunk": 58.4356,
+      "completion_rate": 0.5714
+    },
+    {
+      "team": "TB",
+      "n": 285,
+      "dss_mean": 57.5452,
+      "dss_ci95": [
+        56.5518,
+        58.5592
+      ],
+      "dss_shrunk": 57.4377,
+      "completion_rate": 0.607
+    },
+    {
+      "team": "TEN",
+      "n": 272,
+      "dss_mean": 55.1437,
+      "dss_ci95": [
+        54.1724,
+        56.0254
+      ],
+      "dss_shrunk": 55.2217,
+      "completion_rate": 0.5515
+    },
+    {
+      "team": "WAS",
+      "n": 276,
+      "dss_mean": 54.9199,
+      "dss_ci95": [
+        53.9468,
+        55.8505
+      ],
+      "dss_shrunk": 55.0195,
+      "completion_rate": 0.6449
+    }
+  ],
+  "coverages": [
+    {
+      "coverage": "Cover-3",
+      "coverage_type": "Zone",
+      "n": 2361,
+      "dss_mean": 57.1389,
+      "completion_rate": 0.6582
+    },
+    {
+      "coverage": "Cover-1",
+      "coverage_type": "Man",
+      "n": 1755,
+      "dss_mean": 53.5144,
+      "completion_rate": 0.5299
+    },
+    {
+      "coverage": "Cover-2",
+      "coverage_type": "Zone",
+      "n": 960,
+      "dss_mean": 57.711,
+      "completion_rate": 0.6729
+    },
+    {
+      "coverage": "Quarters",
+      "coverage_type": "Zone",
+      "n": 903,
+      "dss_mean": 59.6627,
+      "completion_rate": 0.6246
+    },
+    {
+      "coverage": "Cover-6",
+      "coverage_type": "Zone",
+      "n": 719,
+      "dss_mean": 58.6308,
+      "completion_rate": 0.6481
+    },
+    {
+      "coverage": "Red Zone",
+      "coverage_type": "Other",
+      "n": 320,
+      "dss_mean": 50.8015,
+      "completion_rate": 0.5125
+    },
+    {
+      "coverage": "Cover-0",
+      "coverage_type": "Man",
+      "n": 244,
+      "dss_mean": 47.7692,
+      "completion_rate": 0.5205
+    },
+    {
+      "coverage": "2-Man",
+      "coverage_type": "Man",
+      "n": 161,
+      "dss_mean": 59.0776,
+      "completion_rate": 0.5652
+    },
+    {
+      "coverage": "Bracket",
+      "coverage_type": "Other",
+      "n": 40,
+      "dss_mean": 52.821,
+      "completion_rate": 0.575
+    },
+    {
+      "coverage": "Prevent",
+      "coverage_type": "Other",
+      "n": 29,
+      "dss_mean": 60.7603,
+      "completion_rate": 0.3448
+    },
+    {
+      "coverage": "Goal Line",
+      "coverage_type": "Other",
+      "n": 13,
+      "dss_mean": 52.3746,
+      "completion_rate": 0.6154
+    },
+    {
+      "coverage": "Miscellaneous",
+      "coverage_type": "Other",
+      "n": 5,
+      "dss_mean": 53.05,
+      "completion_rate": 0.6
+    }
+  ],
+  "replays": []
+}

@@ -1,266 +1,151 @@
-# NFL Defensive Sync Score (DSS) Analytics Platform
+# Defensive Sync Score (DSS)
 
-> **Next-Generation AI-Powered Analytics for NFL Defense Strategy**
+A tracking-data metric for NFL secondaries, built from the NFL Big Data Bowl 2023 files
+(2021 season, weeks 1 to 8). The question: does a secondary that moves as a coordinated unit
+allow fewer completions?
 
-A professional analytics platform analyzing 7,510 NFL plays from the 2021 season, featuring real-time AI insights and interactive visualizations. Designed for coaches, scouts, and analysts who demand clarity over chaos.
+The short answer from the data in this repository: pooled over all plays, the metric shows no
+linear association with pass completion. That null result is misleading on its own. Inside each
+coverage family the association is real and has the expected sign, and it disappears once time
+to throw and coverage family are controlled. The metric has not been shown to carry
+information about completions beyond those two variables. Every number on this page is read
+from [`exports/site-data.json`](exports/site-data.json), which `uv run dss export` regenerates
+from the precomputed results.
 
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
-[![Plotly Dash](https://img.shields.io/badge/Plotly-Dash-00D9FF.svg)](https://plotly.com/dash/)
-[![AI Powered](https://img.shields.io/badge/AI-Powered-FF6B35.svg)](https://www.anthropic.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+## The metric
 
----
+For every pass play, frames from the snap to the pass release are scored on the defensive backs
+who are in coverage (PFF role `Coverage`, official position CB, FS, SS or DB, on the defensive
+team). Three sub-scores in [0, 1] are averaged over the frames:
 
-## Features
+| Sub-score | Definition |
+|---|---|
+| VA, velocity alignment | mean cosine similarity between each moving player's velocity and the group mean velocity, clamped to [0, 1] |
+| SD, spacing discipline | `1 / (1 + cv)`, with `cv` the coefficient of variation of the pairwise distances |
+| OD, orientation divergence | `1 - R`, with `R` the resultant length of the body orientations |
 
-### **Professional Analytics Dashboard**
-- **Real-time Team Rankings** - Compare all 32 NFL teams by DSS
-- **Performance Correlation** - Analyze DSS vs completion rates
-- **Coverage Analysis** - Deep dive into 12+ coverage types
-- **Interactive Heatmaps** - Team × Coverage performance matrix
-- **Sub-Score Radar** - Multi-dimensional defensive profiles
+`DSS = 100 * (0.40*VA + 0.30*SD + 0.30*OD)`. The weights are fixed by hand, not fitted.
+A play needs at least 3 backs on at least 3 frames.
 
-### **AI-Powered Insights**
-- **Bring Your Own AI** - Support for OpenAI, Anthropic Claude, Mistral AI, Google Gemini
-- **Natural Language Queries** - Ask questions in plain English/French
-- **Built-In Analytics Engine** - Works without external APIs
-- **Smart Fallback** - Automatic switch to built-in mode on API errors
+## Results (7510 plays, 122 games, 32 teams)
 
-### **Modern UX**
-- **Dark Theme** - Professional interface optimized for long sessions
-- **Responsive Layout** - 40/60 split for chat and visualizations
-- **Loading Indicators** - Clear feedback on AI processing
-- **Zero Emojis** - Clean, professional design
+Outcome: 1 if the pass was completed, else 0. This section is the project's main finding: a
+null pooled result, a real within-group association, and its disappearance under control. It
+is a worked example of confounding, and the reason the DSS is not presented as a validated
+metric.
 
----
+### 1. Pooled over all plays: nothing
 
-## Screenshots
+For the DSS itself: r = -0.0185, p = 0.109833, n = 7510. By DSS quintile (lowest to highest)
+the completion rate is 0.6232, 0.6225, 0.5939, 0.5939 and 0.6198, with 1502 plays each, which
+is not monotonic. The written verdict rule in `src/nfl_dss/export.py` looks at this pooled
+correlation only and returns `no_signal`.
 
-### Team Rankings
-![Rankings Dashboard](screenshots/rankings.png)
-*Horizontal bar chart showing DSS rankings for all 32 teams with Viridis color scale*
+### 2. Inside each coverage family: a real association
 
-### Performance Analysis
-![Performance Scatter](screenshots/performance.png)
-*Correlation analysis between DSS and completion rates (r=0.032)*
+| Coverage family | plays | r | p | completion, DSS at or above median | completion, DSS below median |
+|---|---|---|---|---|---|
+| Man | 2160 | -0.0708 | 0.000997 | 0.5014 | 0.5616 |
+| Zone | 4943 | -0.0477 | 0.000793 | 0.635 | 0.6719 |
+| Other | 407 | -0.0741 | 0.135459 | 0.4755 | 0.5468 |
 
-### Coverage Deep Dive
-![Coverage Box Plots](screenshots/coverage.png)
-*Distribution analysis across 12+ coverage types with statistical insights*
+In man and in zone coverage a higher DSS goes with fewer completions, and the p-values are
+small. The median splits give the figures quoted by the first version of this README (about
+50 versus 56 percent in man coverage, 63.5 versus 67 in zone): the export reproduces them. They
+are not wrong. They are confounded. The pooled correlation is null because coverage family
+moves both variables: zone plays have a higher DSS and a higher completion rate than man
+plays (Cover-3: DSS 57.1389, completion 0.6582; Cover-1: DSS 53.5144, completion 0.5299),
+which cancels the within-family slope. The export labels this pattern `simpson`, by a rule
+written in the code (see `docs/CONTRACT.md`).
 
-### Team × Coverage Heatmap
-![Heatmap](screenshots/heatmap.png)
-*Detailed performance matrix showing team effectiveness by coverage scheme*
+### 3. After control: nothing again
 
-### Sub-Score Profiles
-![Radar Chart](screenshots/trends.png)
-*Multi-dimensional radar chart for top 8 teams (VA, SD, OD dimensions)*
+Time to throw, measured as the number of frames between snap and release, correlates with
+completion at r = -0.1891, far more than the DSS does, and it differs between coverage
+families. The partial correlation of DSS and completion, controlling for time to throw and
+coverage family, is r = -0.004, p = 0.731144, n = 7510. The within-family association is
+therefore not distinguishable from zero once those two variables are accounted for. The data do
+not say which of the two does the work; telling them apart needs the held-out model comparison
+below.
 
----
+### Sub-scores
 
-## Quick Start
+Pooled correlation with completion, not adjusted for the confounders above:
 
-### Prerequisites
+| | mean | sd | r | p |
+|---|---|---|---|---|
+| VA | 65.0163 | 15.2238 | 0.005 | 0.667767 |
+| SD | 71.0002 | 2.9968 | 0.0271 | 0.019032 |
+| OD | 29.84 | 14.3135 | -0.0478 | 0.000034 |
+
+OD has the strongest pooled association and the expected sign. SD points the other way
+(a more disciplined spacing goes with slightly more completions). VA shows nothing.
+
+### Teams
+
+Per-team means come with bootstrap 95% intervals (2000 resamples, fixed seed) 1.74 to 2.50
+points wide, and with an empirical-Bayes shrunk mean. DSS differs between coverage schemes
+(for example 47.77 in Cover-0 and 59.66 in Quarters), and no adjustment for the mix of schemes
+a team plays is made, so a team's mean is not a clean measure of its coordination.
+
+### Not done yet
+
+A held-out model comparison (does DSS improve a baseline that already knows time to throw and
+coverage?). It is tracked in issue #5 and the export field `model_comparison` is `null` until
+then. Until it exists, the claim supported by this repository is limited to what is above: no
+pooled association, a within-family association that does not survive the two controls.
+
+## Install and use
+
+Requires [uv](https://docs.astral.sh/uv/) and Python 3.12.
 
 ```bash
-Python 3.9+
-pip (Python package manager)
+uv sync --frozen
+uv run dss export      # writes exports/site-data.json from output/dss_results.csv
 ```
 
-### Installation
+`output/dss_results.csv` is the precomputed artifact, one row per scored play, kept in the
+repository. By default `export` also reads `data/plays.csv` and `data/games.csv` (see Data) to
+cross-check it. `uv run dss export --results-only` computes the same statistics from the
+tracked results file alone; this is what CI does to check that `exports/site-data.json` is
+still what the code produces.
+
+A full rebuild from tracking data:
 
 ```bash
-# Clone the repository
-git clone https://github.com/florianhemery/nfl-pocket-collapse.git
-cd nfl-pocket-collapse
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the application
-python src/app_nextgen.py
+bash scripts/fetch_data.sh   # needs the kaggle CLI and accepted competition rules
+uv run dss build             # writes output/dss_results.csv
 ```
 
-### Access
+The full rebuild was not run when the package was written: the tracking files were not
+available locally. The pipeline is covered by synthetic fixtures and by an equivalence test
+against the original loop-based implementation (issue #6 tracks the replay feature that also
+needs tracking data).
 
-Open your browser and navigate to:
-```
-http://127.0.0.1:8050
-```
+## Data
 
----
+The raw Kaggle files are not stored in this repository (see
+[ADR 0005](docs/decisions/0005-donnees-kaggle-hors-depot.md)). A row-level extract is:
+`output/dss_results.csv` has one row per analyzed play with the scores, the game and play ids,
+the season and week, the defensive team, the PFF coverage labels (`coverage`, `coverageType`)
+and the completion flag. Other competition columns (pass and play results, down, yardage,
+offensive team) are not kept. The terms of the 2023 edition were not verified, and recent
+editions are reported to use CC BY-NC 4.0, so whether redistributing that extract is permitted
+is unverified. Check the
+[competition rules](https://www.kaggle.com/competitions/nfl-big-data-bowl-2023/rules) before
+reusing it. `data/checksums.sha256` holds the sha256 of the four metadata files.
 
-## AI Configuration
+## Development
 
-The platform supports multiple AI providers. Click **Settings** in the top-right corner to configure:
-
-### Supported Providers
-
-| Provider | Models | Pricing | Notes |
-|----------|--------|---------|-------|
-| **Anthropic Claude** | Sonnet 5.5, Opus 5.5, Fable 5.1, Haiku 5.5 | $0.10 - $50 per MTok | Recommended for best results |
-| **OpenAI** | GPT-4 Turbo, GPT-4, GPT-3.5 Turbo | Standard OpenAI pricing | Most stable API |
-| **Mistral AI** | Large, Small, Open Mixtral, Open Mistral | Free & paid tiers | Good cost/performance |
-| **Google Gemini** | Gemini Pro, Gemini Pro Vision | Free tier available | Great for testing |
-
-### Example Queries
-
-```
-"Analyze SEA defensive performance"
-"Compare coverage effectiveness"
-"Which teams excel at Cover-3?"
-"Show me the top 5 defenses"
-"Explain the DSS metric"
+```bash
+uv run ruff check && uv run ruff format --check
+uv run pyright          # strict
+uv run pytest           # coverage threshold 80 percent
 ```
 
----
-
-## Dataset
-
-- **7,510 NFL plays** from the 2021 season
-- **32 teams** analyzed
-- **12+ coverage types** (Cover-0 to Red Zone)
-- **4 core metrics**:
-  - **DSS** - Defensive Sync Score (composite metric)
-  - **VA** - Velocity Advantage
-  - **SD** - Spacing Discipline  
-  - **OD** - Orientation Divergence
-
----
-
-## Technology Stack
-
-- **Backend**: Python 3.9+
-- **Web Framework**: Plotly Dash 2.x
-- **Visualizations**: Plotly, Plotly Express
-- **Data Processing**: Pandas, NumPy
-- **AI Integration**: OpenAI, Anthropic, Mistral, Google AI SDKs
-- **UI Components**: Dash Bootstrap Components
-
----
-
-## Project Structure
-
-```
-nfl-pocket-collapse/
-├── src/
-│   ├── app_nextgen.py          # Main NextGen application
-│   ├── app.py                  # Legacy Dash app
-│   └── app_v2.py               # V2 with filters
-├── output/
-│   └── dss_results.csv         # Core dataset (7,510 plays)
-├── screenshots/                 # UI screenshots for README
-├── docs/
-│   ├── CLAUDE_2026_MODELS.md   # Claude AI setup guide
-│   ├── TROUBLESHOOTING_COMPLETE.md
-│   └── NEXTGEN_README.md
-├── requirements.txt            # Python dependencies
-└── README.md                   # You are here
-```
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-#### "ID not found in layout"
-✅ **Fixed in v2.0** - Removed dynamic callback that caused race conditions.
-
-#### API Rate Limit (429)
-✅ **Auto-fallback** - Switches to built-in analytics mode automatically.
-
-#### ThinkingBlock AttributeError
-✅ **Fixed** - Properly parses Claude 5.x response structure.
-
-### Need Help?
-
-Check our comprehensive guides:
-- [TROUBLESHOOTING_COMPLETE.md](TROUBLESHOOTING_COMPLETE.md) - Full diagnostic guide
-- [CLAUDE_2026_MODELS.md](CLAUDE_2026_MODELS.md) - Claude AI setup
-- [MISTRAL_TROUBLESHOOTING.md](MISTRAL_TROUBLESHOOTING.md) - Mistral AI guide
-
----
-
-## Roadmap
-
-- [ ] Real-time game tracking
-- [ ] Multi-season comparisons
-- [ ] Player-level analytics
-- [ ] Export to PDF/PowerPoint
-- [ ] Mobile-responsive design
-- [ ] Custom metric builder
-- [ ] Team comparison mode
-- [ ] Historical trend analysis
-
----
-
-## Development History
-
-### v2.0 - NextGen Interface (Oct 2026)
-- ✅ Professional UI without emojis
-- ✅ AI-powered chat with 4 providers
-- ✅ Loading indicators
-- ✅ 40/60 layout split
-- ✅ Built-in analytics fallback
-- ✅ Claude 5.x support
-- ✅ ThinkingBlock parsing
-
-### v1.0 - Original Dashboard
-- Initial Plotly Dash implementation
-- Basic team rankings and filters
-- Static visualizations
-
----
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
----
+See [AGENTS.md](AGENTS.md), [docs/QUALITY.md](docs/QUALITY.md), the decisions in
+[docs/decisions](docs/decisions) and the data contract in [docs/CONTRACT.md](docs/CONTRACT.md).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## Author
-
-**Florian Hemery**
-
-- GitHub: [@florianhemery](https://github.com/florianhemery)
-- Project: [nfl-pocket-collapse](https://github.com/florianhemery/nfl-pocket-collapse)
-
----
-
-## Acknowledgments
-
-- NFL data from 2021 season analysis
-- Plotly for amazing visualization capabilities
-- Anthropic, OpenAI, Mistral, Google for AI APIs
-- The defensive analytics community
-
----
-
-## Stats
-
-![Code Size](https://img.shields.io/github/languages/code-size/florianhemery/nfl-pocket-collapse)
-![Repo Size](https://img.shields.io/github/repo-size/florianhemery/nfl-pocket-collapse)
-![Last Commit](https://img.shields.io/github/last-commit/florianhemery/nfl-pocket-collapse)
-
----
-
-<p align="center">
-  <strong>Built for NFL Analytics</strong>
-</p>
+MIT, see [LICENSE](LICENSE). The code is MIT; the data keeps its own terms.

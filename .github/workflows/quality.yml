@@ -1,0 +1,41 @@
+name: quality
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  # gitleaks-action lists the commits of a pull request through the API
+  pull-requests: read
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.1"
+      - name: Dependencies
+        run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check
+      - name: Format
+        run: uv run ruff format --check
+      - name: Types (pyright strict)
+        run: uv run pyright
+      - name: Tests and coverage (threshold set in pyproject.toml, 80 percent)
+        run: uv run pytest
+      - name: Secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Dependency audit
+        # pip-audit 2.10.1 is a locked dev dependency, so its own dependency tree is pinned by
+        # uv.lock like everything else. The requirements file lists every locked package.
+        run: |
+          uv export --frozen --no-emit-project -o "$RUNNER_TEMP/requirements.txt"
+          uv run --frozen pip-audit --requirement "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
