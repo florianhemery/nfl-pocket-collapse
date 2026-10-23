@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "provenance": {
-    "pipeline_commit": "194c0fa",
-    "generated_at": "2026-10-23T21:06:44Z",
+    "pipeline_commit": "0425e71",
+    "generated_at": "2026-10-23T21:14:52Z",
     "dataset": "NFL Big Data Bowl 2023 (2021 season, weeks 1-8)",
     "dataset_license_note": "The terms of the 2023 competition were not verified by the producer of this file. Recent Big Data Bowl editions are published under CC BY-NC 4.0 according to secondary sources. The Kaggle files are not redistributed here: only derived statistics are.",
     "input_sha256": {
